@@ -79,3 +79,11 @@ sectionId: release-gate
 ruleId: QG-014
 
 发布前运行双语、结构、Schema、路径、哈希、设计锁、覆盖率、QA、缺口和可选 Git 白名单检查。结果、命令、时间、工具版本和未解决项写入报告；报告不得泄漏创建机器绝对路径。
+
+ruleId: QG-015
+
+每条通过的 QA 行必须引用带 SHA-256 的机器可读 evidence record。记录必须绑定 qa/page/state/variant/证据类型、工具、可重放命令、实际工件路径与哈希及逐项检查；任意图片或手填 `pass` 不能构成通过证据。
+
+ruleId: QG-016
+
+视觉通过由验证器解码 reference/current、重算 overlay/diff 与像素差异率并对照区域容差；结构通过必须把需求、区域和组件映射到真实合同；交互通过必须引用页面已登记 interaction ID 的可重放测试用例。三类结果均从证据推导，不信任声明状态。

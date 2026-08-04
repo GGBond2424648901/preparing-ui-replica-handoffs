@@ -18,6 +18,7 @@ This skill is independent. Do not call, require, or route work through `design-i
 - Preserve the original canvas as the baseline. If it does not fit, retain geometry and use horizontal scrolling; do not compress or rearrange it without evidenced or approved responsive variants. 以原始画布为基线；显示不下时保持几何并水平滚动，没有证据或批准不得压缩重排。
 - Scripts do not initialize, stage, commit, push, or create a worktree. They may only inspect Git and report an allowlist result. 脚本只读检查 Git，不初始化、暂存、提交、推送或创建 worktree。
 - Validation must fail closed. Never claim implementation-ready or complete while blocker/major gaps, missing evidence classes, drift, unsafe paths, or validation errors remain. 验证必须失败关闭；存在 blocker/major、证据缺失、漂移、不安全路径或错误时不得宣称可实施或完成。
+- Readiness validation requires the original source directory. Omitting `--source-root` is an error, never a waiver. 可实施验证必须提供原始源目录；省略 `--source-root` 是错误，不能视为豁免。
 
 ## Workflow / 工作流
 
@@ -81,4 +82,4 @@ The locale trees contain three top-level guides and one page contract per target
 
 ## Completion gate / 完成门禁
 
-A handoff is ready for implementation only when both locale trees and all required contracts are present, all paths are package-relative, source/copy hashes and the design lock verify, page/state/variant and requirement coverage are complete, each unknown points to an unresolved gap, and no blocker/major gap remains. QA requires all three evidence classes: visual, structural, and interaction. A generated skeleton is intentionally incomplete until an Agent enriches and validates it. 只有双语文档与合同齐全、相对路径/哈希/设计锁通过、页面与需求覆盖完整、未知项均关联未解决缺口且无 blocker/major 时才可实施；视觉、结构、交互三类 QA 缺一不可，生成骨架本身永远不等于完成。
+A handoff is ready for implementation only when both locale trees and all required contracts are present and substantive, all paths are package-relative, the original source is supplied and source/copy hashes plus the design lock verify, page/state/variant/component/requirement coverage is complete, each unknown points to an unresolved gap, and no blocker/major gap remains. QA requires validated evidence records for all three classes: computed visual comparison, structural mappings, and replayable interaction cases. A declared `pass` or arbitrary evidence file is insufficient. A generated skeleton is intentionally incomplete until an Agent enriches and validates it. 只有双语文档与合同内容实质完整、相对路径正确、验证时提供原始源目录且源/副本哈希和设计锁通过、页面/状态/变体/组件/需求覆盖完整、未知项均关联未解决缺口且无 blocker/major 时才可实施；视觉必须计算比对，结构必须映射，交互必须可重放，单纯填写 `pass` 或放置任意证据文件无效，生成骨架本身永远不等于完成。

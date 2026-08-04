@@ -71,6 +71,9 @@ class SkillContentTests(unittest.TestCase):
             "fail closed",
             "relative paths",
             "Chinese and English",
+            "Omitting `--source-root` is an error",
+            "validated evidence records",
+            "replayable interaction cases",
         )
         for literal in required_literals:
             self.assertIn(literal, content)
@@ -130,6 +133,8 @@ class SkillContentTests(unittest.TestCase):
             "交互验收",
             "相对路径",
             "推断文案",
+            "机器可读 evidence record",
+            "[absence:<field>]",
         ):
             self.assertIn(literal, zh)
 
@@ -141,6 +146,8 @@ class SkillContentTests(unittest.TestCase):
             "interaction acceptance",
             "relative paths",
             "inferred copy",
+            "machine-readable evidence record",
+            "[absence:<field>]",
         ):
             self.assertIn(literal, en)
 
