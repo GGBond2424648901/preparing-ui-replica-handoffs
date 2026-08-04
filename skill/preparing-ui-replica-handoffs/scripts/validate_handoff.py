@@ -5,9 +5,11 @@ import csv
 import hashlib
 import io
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 import subprocess
+import tempfile
 import types
 
 from jsonschema import Draft202012Validator, FormatChecker
@@ -78,6 +80,12 @@ REQUIRED_FILES = tuple(
             "README.md",
             *SCHEMA_CONTRACTS,
             *CSV_FIELDS,
+            "docs/zh/设计稿总目录.md",
+            "docs/zh/UI实施说明.md",
+            "docs/zh/组件规范.md",
+            "docs/en/Design-Catalog.md",
+            "docs/en/UI-Implementation-Guide.md",
+            "docs/en/Component-Specification.md",
             "reports/contact-sheet.png",
             "reports/validation-report.json",
             "tools/validate-command.txt",
@@ -86,6 +94,7 @@ REQUIRED_FILES = tuple(
 )
 QA_TYPES = frozenset({"visual", "structural", "interaction"})
 DIFF_MODES = frozenset({"reference", "current", "overlay", "diff"})
+SUPPORTED_IMAGE_SUFFIXES = frozenset({".gif", ".jpeg", ".jpg", ".png", ".webp"})
 PLACEHOLDER_VALUES = frozenset(
     {"", "unknown", "unclassified", "tbd", "todo", "n/a", "not-set"}
 )
@@ -252,15 +261,18 @@ def _has_gap(item: dict) -> bool:
     return bool(item.get("gapId")) or bool(item.get("gapIds"))
 
 
+def _requires_gap(item: dict) -> bool:
+    return (
+        item.get("evidenceLevel") == "unknown"
+        or item.get("status") in {"unknown", "proposed"}
+        or item.get("theme") == "unknown"
+        or item.get("classification") == "unknown"
+    )
+
+
 def _check_unknown_gaps(value: object, path: str, issues: list[dict]) -> None:
     if isinstance(value, dict):
-        is_unknown = (
-            value.get("evidenceLevel") == "unknown"
-            or value.get("status") in {"unknown", "proposed"}
-            or value.get("theme") == "unknown"
-            or value.get("classification") == "unknown"
-        )
-        if is_unknown and not _has_gap(value):
+        if _requires_gap(value) and not _has_gap(value):
             issues.append(
                 _issue(
                     "UNKNOWN_WITHOUT_GAP_ID",
@@ -303,8 +315,49 @@ def _check_assets(
 ) -> None:
     if not manifest or not isinstance(manifest.get("assets"), list):
         return
-    source_records = []
-    for asset in manifest["assets"]:
+    assets = [asset for asset in manifest["assets"] if isinstance(asset, dict)]
+    for field, code in (
+        ("assetId", "DUPLICATE_ASSET_ID"),
+        ("sourceRelativePath", "DUPLICATE_SOURCE_RELATIVE_PATH"),
+        ("deliveryRelativePath", "DUPLICATE_DELIVERY_RELATIVE_PATH"),
+    ):
+        seen = set()
+        for asset in assets:
+            value = asset.get(field)
+            if value in seen:
+                issues.append(
+                    _issue(
+                        code,
+                        "contracts/asset-manifest.json",
+                        f"manifest {field} is duplicated: {value}",
+                    )
+                )
+            seen.add(value)
+
+    actual_source_records: list[tuple[str, str]] = []
+    if source_root is not None:
+        if not source_root.is_dir():
+            issues.append(
+                _issue(
+                    "SOURCE_ROOT_MISSING",
+                    str(source_root),
+                    "source root does not exist or is not a directory",
+                )
+            )
+        else:
+            try:
+                actual_source_records = [
+                    (path.relative_to(source_root).as_posix(), _sha256(path))
+                    for path in sorted(source_root.rglob("*"))
+                    if path.is_file()
+                    and path.suffix.lower() in SUPPORTED_IMAGE_SUFFIXES
+                ]
+            except OSError as error:
+                issues.append(
+                    _issue("SOURCE_SCAN_FAILED", str(source_root), str(error))
+                )
+
+    for asset in assets:
         if not isinstance(asset, dict):
             continue
         asset_id = str(asset.get("assetId", "unknown"))
@@ -344,13 +397,30 @@ def _check_assets(
             )
             continue
         source_hash = _sha256(source)
-        source_records.append((source_relative, source_hash))
         if isinstance(expected_hash, str) and source_hash != expected_hash:
             issues.append(
                 _issue("SOURCE_HASH_MISMATCH", source_relative, "source hash differs from manifest")
             )
-    if source_root is not None and source_records:
-        computed_source_set_hash = _record_set_hash(source_records)
+    if source_root is not None and source_root.is_dir():
+        manifest_source_paths = {
+            asset.get("sourceRelativePath")
+            for asset in assets
+            if _safe_relative_path(asset.get("sourceRelativePath"))
+        }
+        actual_source_paths = {path for path, _file_hash in actual_source_records}
+        missing_from_manifest = sorted(actual_source_paths - manifest_source_paths)
+        missing_from_source = sorted(manifest_source_paths - actual_source_paths)
+        if missing_from_manifest or missing_from_source:
+            issues.append(
+                _issue(
+                    "SOURCE_SET_COVERAGE_MISMATCH",
+                    "contracts/asset-manifest.json",
+                    "manifest and supported source image paths are not one-to-one",
+                    missingFromManifest=missing_from_manifest,
+                    missingFromSource=missing_from_source,
+                )
+            )
+        computed_source_set_hash = _record_set_hash(actual_source_records)
         if computed_source_set_hash != manifest.get("sourceSetHash"):
             issues.append(
                 _issue(
@@ -400,7 +470,19 @@ def _check_qa_paths(
     if qa_rows is None:
         return
     for row in qa_rows:
-        for field in ("referencePath", "currentPath", "overlayPath", "diffPath"):
+        evidence_fields = ("referencePath", "currentPath", "overlayPath", "diffPath")
+        evidence_paths = [row.get(field, "") for field in evidence_fields]
+        if all(evidence_paths) and len(set(evidence_paths)) != len(evidence_paths):
+            issues.append(
+                _issue(
+                    "QA_EVIDENCE_PATH_REUSED",
+                    "contracts/visual-qa-matrix.csv",
+                    "QA comparison evidence must use four distinct files",
+                    qaId=row.get("qaId"),
+                )
+            )
+        evidence_hashes = []
+        for field in evidence_fields:
             value = row.get(field, "")
             if not value:
                 continue
@@ -424,6 +506,21 @@ def _check_qa_paths(
                         qaId=row.get("qaId"),
                     )
                 )
+            else:
+                evidence_hashes.append(_sha256(target))
+        if (
+            len(set(evidence_paths)) == len(evidence_fields)
+            and len(evidence_hashes) == len(evidence_fields)
+            and len(set(evidence_hashes)) != len(evidence_hashes)
+        ):
+            issues.append(
+                _issue(
+                    "QA_EVIDENCE_HASH_REUSED",
+                    "contracts/visual-qa-matrix.csv",
+                    "QA comparison evidence files must have distinct content hashes",
+                    qaId=row.get("qaId"),
+                )
+            )
 
 
 def _expected_identities(documents: dict[str, dict]) -> set[tuple[object, object, object]]:
@@ -508,6 +605,56 @@ def _check_capture_profiles(documents: dict[str, dict], issues: list[dict]) -> N
             )
 
 
+def _check_required_collections(
+    documents: dict[str, dict],
+    csv_documents: dict[str, list[dict]],
+    issues: list[dict],
+) -> None:
+    collections = (
+        ("contracts/asset-manifest.json", "assets", "EMPTY_ASSET_MANIFEST"),
+        ("contracts/page-inventory.json", "pages", "EMPTY_PAGE_INVENTORY"),
+        ("contracts/capture-profile.json", "profiles", "EMPTY_CAPTURE_PROFILES"),
+        ("contracts/implementation-map.json", "mappings", "EMPTY_IMPLEMENTATION_MAP"),
+        ("contracts/diff-regions.json", "pages", "EMPTY_DIFF_PAGES"),
+    )
+    for relative_path, key, code in collections:
+        document = documents.get(relative_path)
+        if document is not None and not document.get(key):
+            issues.append(
+                _issue(code, relative_path, f"required {key} collection is empty")
+            )
+    qa_rows = csv_documents.get("contracts/visual-qa-matrix.csv")
+    if qa_rows is not None and not qa_rows:
+        issues.append(
+            _issue(
+                "EMPTY_QA_MATRIX",
+                "contracts/visual-qa-matrix.csv",
+                "visual QA matrix must contain at least one row",
+            )
+        )
+
+
+def _check_implementation_coverage(
+    documents: dict[str, dict],
+    identities: set[tuple[object, object, object]],
+    issues: list[dict],
+) -> None:
+    implementation = documents.get("contracts/implementation-map.json") or {}
+    mapped = {
+        _identity(mapping)
+        for mapping in implementation.get("mappings", [])
+        if isinstance(mapping, dict)
+    }
+    for identity in sorted(identities - mapped, key=_identity_text):
+        issues.append(
+            _issue(
+                "MISSING_IMPLEMENTATION_MAPPING",
+                "contracts/implementation-map.json",
+                f"implementation mapping is missing for {_identity_text(identity)}",
+            )
+        )
+
+
 def _check_diff_and_qa(
     documents: dict[str, dict],
     qa_rows: list[dict] | None,
@@ -515,16 +662,44 @@ def _check_diff_and_qa(
     issues: list[dict],
 ) -> None:
     diff = documents.get("contracts/diff-regions.json") or {}
+    capture = documents.get("contracts/capture-profile.json") or {}
+    capture_profile_ids = {
+        profile.get("captureProfileId")
+        for profile in capture.get("profiles", [])
+        if isinstance(profile, dict)
+    }
     diff_by_identity = {
         _identity(page): page
         for page in diff.get("pages", [])
         if isinstance(page, dict)
     }
     qa_rows = qa_rows or []
+    for row in qa_rows:
+        if _identity(row) not in identities:
+            issues.append(
+                _issue(
+                    "QA_TARGET_IDENTITY_MISSING",
+                    "contracts/visual-qa-matrix.csv",
+                    f"QA row {row.get('qaId')} references an unknown page identity",
+                    identity=_identity_text(_identity(row)),
+                )
+            )
     for identity in sorted(identities, key=_identity_text):
         identity_name = _identity_text(identity)
         diff_page = diff_by_identity.get(identity)
         regions = diff_page.get("regions", []) if diff_page else []
+        diff_capture_profile_id = (
+            diff_page.get("captureProfileId") if diff_page else None
+        )
+        if diff_page and diff_capture_profile_id not in capture_profile_ids:
+            issues.append(
+                _issue(
+                    "DIFF_CAPTURE_PROFILE_MISSING",
+                    "contracts/diff-regions.json",
+                    f"diff capture profile does not exist for {identity_name}",
+                    captureProfileId=diff_capture_profile_id,
+                )
+            )
         diff_complete = bool(regions)
         for region in regions:
             diff_complete = diff_complete and DIFF_MODES.issubset(
@@ -551,6 +726,9 @@ def _check_diff_and_qa(
             )
 
         matching_qa = [row for row in qa_rows if _identity(row) == identity]
+        region_ids = {
+            region.get("regionId") for region in regions if isinstance(region, dict)
+        }
         covered = {row.get("evidenceType") for row in matching_qa}
         if not QA_TYPES.issubset(covered):
             issues.append(
@@ -561,6 +739,33 @@ def _check_diff_and_qa(
                 )
             )
         for row in matching_qa:
+            qa_capture_profile_id = row.get("captureProfileId")
+            if qa_capture_profile_id not in capture_profile_ids:
+                issues.append(
+                    _issue(
+                        "QA_CAPTURE_PROFILE_MISSING",
+                        "contracts/visual-qa-matrix.csv",
+                        f"QA row {row.get('qaId')} references a missing capture profile",
+                        captureProfileId=qa_capture_profile_id,
+                    )
+                )
+            if diff_page and qa_capture_profile_id != diff_capture_profile_id:
+                issues.append(
+                    _issue(
+                        "QA_DIFF_CAPTURE_PROFILE_MISMATCH",
+                        "contracts/visual-qa-matrix.csv",
+                        f"QA row {row.get('qaId')} capture profile differs from its diff page",
+                    )
+                )
+            if row.get("regionId") not in region_ids:
+                issues.append(
+                    _issue(
+                        "QA_REGION_MISSING",
+                        "contracts/visual-qa-matrix.csv",
+                        f"QA row {row.get('qaId')} references a missing diff region",
+                        regionId=row.get("regionId"),
+                    )
+                )
             if row.get("status") != "pass":
                 issues.append(
                     _issue(
@@ -601,6 +806,75 @@ def _check_gaps(gap_rows: list[dict] | None, issues: list[dict]) -> None:
                     f"major gap remains unresolved: {row.get('gapId')}",
                 )
             )
+
+
+def _check_gap_references(
+    value: object,
+    path: str,
+    gap_registry: dict[str, dict],
+    issues: list[dict],
+) -> None:
+    if isinstance(value, dict):
+        if _requires_gap(value):
+            referenced_ids = []
+            if value.get("gapId"):
+                referenced_ids.append(value["gapId"])
+            referenced_ids.extend(value.get("gapIds") or [])
+            for gap_id in referenced_ids:
+                gap = gap_registry.get(gap_id)
+                if gap is None:
+                    issues.append(
+                        _issue(
+                            "GAP_ID_NOT_FOUND",
+                            path,
+                            f"referenced gap ID does not exist: {gap_id}",
+                            gapId=gap_id,
+                        )
+                    )
+                elif str(gap.get("status", "")).lower() in {"resolved", "closed"}:
+                    issues.append(
+                        _issue(
+                            "UNKNOWN_REFERENCES_RESOLVED_GAP",
+                            path,
+                            f"unknown or proposed state references resolved gap: {gap_id}",
+                            gapId=gap_id,
+                        )
+                    )
+        for key, child in value.items():
+            _check_gap_references(child, f"{path}/{key}", gap_registry, issues)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _check_gap_references(child, f"{path}/{index}", gap_registry, issues)
+
+
+def _check_gap_integrity(
+    documents: dict[str, dict],
+    gap_rows: list[dict] | None,
+    requirement_rows: list[dict] | None,
+    issues: list[dict],
+) -> None:
+    gap_registry = {}
+    for row in gap_rows or []:
+        gap_id = row.get("gapId")
+        if gap_id in gap_registry:
+            issues.append(
+                _issue(
+                    "DUPLICATE_GAP_ID",
+                    "contracts/gap-register.csv",
+                    f"gap ID is duplicated: {gap_id}",
+                )
+            )
+        gap_registry[gap_id] = row
+    for relative_path, document in documents.items():
+        if relative_path.startswith("contracts/") and relative_path != "contracts/design-lock.json":
+            _check_gap_references(document, relative_path, gap_registry, issues)
+    for index, row in enumerate(requirement_rows or []):
+        _check_gap_references(
+            row,
+            f"contracts/requirement-ledger.csv/{index}",
+            gap_registry,
+            issues,
+        )
 
 
 def _check_design_lock(
@@ -680,7 +954,11 @@ def _check_design_lock(
         for path in handoff_root.rglob("*")
         if path.is_file()
         and path.relative_to(handoff_root).as_posix()
-        not in {"contracts/design-lock.json", "reports/contact-sheet.png"}
+        not in {
+            "contracts/design-lock.json",
+            "reports/contact-sheet.png",
+            "reports/validation-report.json",
+        }
     }
     if set(listed_paths) != expected_locked_paths:
         issues.append(
@@ -745,11 +1023,21 @@ def _check_git(
             )
         )
         return {"status": "failed", "reason": "invalid-prefix", "stagedPaths": []}
-    staged = subprocess.run(
-        ["git", "-C", str(repo_root), "diff", "--cached", "--name-only", "-z"],
-        check=False,
-        capture_output=True,
-    )
+    try:
+        staged = subprocess.run(
+            ["git", "-C", str(repo_root), "diff", "--cached", "--name-only", "-z"],
+            check=False,
+            capture_output=True,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        issues.append(
+            _issue(
+                "GIT_STATUS_FAILED",
+                "git",
+                f"could not launch staged-path query: {error}",
+            )
+        )
+        return {"status": "failed", "reason": "git-unavailable", "stagedPaths": []}
     if staged.returncode != 0:
         issues.append(_issue("GIT_STATUS_FAILED", "git", "could not read staged paths"))
         return {"status": "failed", "reason": "git-command-failed", "stagedPaths": []}
@@ -788,6 +1076,24 @@ def _deduplicate_and_sort(issues: list[dict]) -> list[dict]:
         )
         unique[key] = issue
     return [unique[key] for key in sorted(unique)]
+
+
+def _write_validation_report_atomic(handoff_root: Path, report: dict) -> None:
+    reports_root = handoff_root / "reports"
+    reports_root.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=".validation-report-", suffix=".tmp", dir=reports_root
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary_path, reports_root / "validation-report.json")
+    finally:
+        if os.path.lexists(temporary_path):
+            temporary_path.unlink()
 
 
 def validate_handoff(
@@ -836,6 +1142,7 @@ def validate_handoff(
                         csv_documents[relative_path] = rows
 
             _validate_schemas(documents, issues)
+            _check_required_collections(documents, csv_documents, issues)
             _check_duplicate_identities(documents, issues)
             for relative_path, document in documents.items():
                 if relative_path.startswith("contracts/") and relative_path != "contracts/design-lock.json":
@@ -852,11 +1159,19 @@ def validate_handoff(
             qa_rows = csv_documents.get("contracts/visual-qa-matrix.csv")
             _check_qa_paths(handoff_root, qa_rows, issues)
             identities = _expected_identities(documents)
+            _check_implementation_coverage(documents, identities, issues)
             _check_page_documents(handoff_root, identities, issues)
             _check_bilingual(handoff_root, issues)
             _check_capture_profiles(documents, issues)
             _check_diff_and_qa(documents, qa_rows, identities, issues)
-            _check_gaps(csv_documents.get("contracts/gap-register.csv"), issues)
+            gap_rows = csv_documents.get("contracts/gap-register.csv")
+            _check_gap_integrity(
+                documents,
+                gap_rows,
+                csv_documents.get("contracts/requirement-ledger.csv"),
+                issues,
+            )
+            _check_gaps(gap_rows, issues)
             design_lock = _check_design_lock(handoff_root, documents, issues)
         except Exception as error:
             issues.append(
@@ -869,13 +1184,27 @@ def validate_handoff(
 
     checks["git"] = _check_git(repo_root, allowed_git_prefix, issues)
     issues = _deduplicate_and_sort(issues)
-    return {
+    result = {
         "schemaVersion": SCHEMA_VERSION,
         "status": "failed" if issues else "passed",
         "issues": issues,
         "checks": checks,
         "designLock": design_lock,
     }
+    if handoff_root.is_dir():
+        try:
+            _write_validation_report_atomic(handoff_root, result)
+        except (OSError, UnicodeError, TypeError, ValueError) as error:
+            issues.append(
+                _issue(
+                    "VALIDATION_REPORT_WRITE_FAILED",
+                    "reports/validation-report.json",
+                    f"could not atomically persist validation report: {error}",
+                )
+            )
+            result["issues"] = _deduplicate_and_sort(issues)
+            result["status"] = "failed"
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 from pathlib import Path, PurePosixPath
 import re
 
@@ -52,6 +53,8 @@ def build_contact_sheet(handoff_root: Path, output_path: Path) -> dict:
 
     handoff_root = Path(handoff_root)
     output_path = Path(output_path)
+    if os.path.lexists(output_path):
+        raise FileExistsError(f"contact-sheet output already exists: {output_path}")
     manifest_file = handoff_root / MANIFEST_PATH
     manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
     assets = sorted(manifest.get("assets", []), key=lambda asset: asset["assetId"])

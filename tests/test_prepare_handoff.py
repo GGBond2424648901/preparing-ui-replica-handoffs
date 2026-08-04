@@ -861,6 +861,15 @@ class PrepareHandoffTests(unittest.TestCase):
         }
         self.assertSetEqual(set(_file_bytes(first_output)), expected_files)
         self.assertFalse((first_output / "reports" / "contact-sheet.png").exists())
+        design_lock = json.loads(
+            (first_output / "contracts" / "design-lock.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertNotIn(
+            "reports/validation-report.json",
+            {entry["relativePath"] for entry in design_lock["files"]},
+        )
 
         with (first_output / "contracts" / "gap-register.csv").open(
             encoding="utf-8", newline=""

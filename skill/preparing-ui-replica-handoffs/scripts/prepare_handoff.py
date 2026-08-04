@@ -386,8 +386,16 @@ def _managed_output_snapshot(output_root: Path) -> dict | None:
     if referenced_asset_ids != set(asset_ids):
         return None
 
-    expected_files = {"contracts/design-lock.json"}
-    expected_directories = set()
+    expected_files = {
+        "contracts/design-lock.json",
+        "reports/validation-report.json",
+    }
+    expected_directories = {"reports"}
+    optional_contact_sheet = output_root / "reports" / "contact-sheet.png"
+    if optional_contact_sheet.is_symlink():
+        return None
+    if optional_contact_sheet.is_file():
+        expected_files.add("reports/contact-sheet.png")
     locked_hashes = {}
     for entry in lock["files"]:
         relative_path = entry["relativePath"]
@@ -1161,7 +1169,11 @@ def _write_design_lock(
         path
         for path in staging_root.rglob("*")
         if path.is_file()
-        and path.relative_to(staging_root).as_posix() != "contracts/design-lock.json"
+        and path.relative_to(staging_root).as_posix()
+        not in {
+            "contracts/design-lock.json",
+            "reports/validation-report.json",
+        }
     )
     locked_files = [
         {

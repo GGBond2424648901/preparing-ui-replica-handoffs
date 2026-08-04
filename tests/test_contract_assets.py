@@ -572,6 +572,20 @@ class ContractAssetTests(unittest.TestCase):
             with self.subTest(schema=schema_name):
                 self.assertValid(schema_name, document)
 
+    def test_delivery_collections_required_for_validation_cannot_be_empty(self):
+        for schema_name, collection_path in (
+            ("asset-manifest.schema.json", ("assets",)),
+            ("page-inventory.schema.json", ("pages",)),
+            ("capture-profile.schema.json", ("profiles",)),
+            ("implementation-map.schema.json", ("mappings",)),
+            ("diff-regions.schema.json", ("pages",)),
+            ("diff-regions.schema.json", ("pages", 0, "regions")),
+        ):
+            with self.subTest(schema=schema_name, path=collection_path):
+                invalid = copy.deepcopy(VALID_DOCUMENTS[schema_name])
+                _set_at(invalid, collection_path, [])
+                self.assertInvalid(schema_name, invalid)
+
     def test_stable_top_level_keys_and_page_identity_are_required(self):
         required_top_level_keys = {
             name: set(document) for name, document in VALID_DOCUMENTS.items()

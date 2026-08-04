@@ -1,4 +1,5 @@
 import hashlib
+import json
 from pathlib import Path
 import tempfile
 import types
@@ -92,6 +93,33 @@ class ContactSheetTests(unittest.TestCase):
         )
         self.assertEqual(first_result["labels"], second_result["labels"])
         self.assertEqual(first.read_bytes(), second.read_bytes())
+
+    def test_rejects_output_that_already_exists_or_aliases_an_input(self):
+        contact_sheet = _load_module(CONTACT_SHEET_PATH, "build_contact_sheet")
+        manifest_path = self.handoff / "contracts" / "asset-manifest.json"
+        manifest_before = manifest_path.read_bytes()
+        manifest = json.loads(manifest_before)
+        delivery = self.handoff / manifest["assets"][0]["deliveryRelativePath"]
+        delivery_before = delivery.read_bytes()
+        existing = self.handoff / "reports" / "existing.png"
+        existing.parent.mkdir(parents=True, exist_ok=True)
+        existing.write_bytes(b"owner data")
+
+        for output, original in (
+            (manifest_path, manifest_before),
+            (delivery, delivery_before),
+            (existing, b"owner data"),
+        ):
+            with self.subTest(output=output.relative_to(self.handoff)):
+                try:
+                    with self.assertRaises(FileExistsError):
+                        contact_sheet.build_contact_sheet(self.handoff, output)
+                finally:
+                    output.write_bytes(original)
+
+        self.assertEqual(manifest_path.read_bytes(), manifest_before)
+        self.assertEqual(delivery.read_bytes(), delivery_before)
+        self.assertEqual(existing.read_bytes(), b"owner data")
 
 
 if __name__ == "__main__":
