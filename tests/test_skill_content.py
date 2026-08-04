@@ -148,6 +148,8 @@ class SkillContentTests(unittest.TestCase):
             "inferred copy",
             "machine-readable evidence record",
             "[absence:<field>]",
+            "hashed runner result",
+            "never executes untrusted commands",
         ):
             self.assertIn(literal, en)
 

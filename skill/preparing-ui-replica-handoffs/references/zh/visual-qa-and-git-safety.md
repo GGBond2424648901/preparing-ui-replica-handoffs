@@ -87,3 +87,11 @@ ruleId: QG-015
 ruleId: QG-016
 
 视觉通过由验证器解码 reference/current、重算 overlay/diff 与像素差异率并对照区域容差；结构通过必须把需求、区域和组件映射到真实合同；交互通过必须引用页面已登记 interaction ID 的可重放测试用例。三类结果均从证据推导，不信任声明状态。
+
+ruleId: QG-017
+
+reference 必须绑定该页面资产清单中的已验证设计副本。每条通过记录还必须绑定带哈希的 runner result，包含工具/版本/命令、起止时间、退出码 0、非空且全部通过的断言及工件哈希；验证器不执行交付包中的不可信命令。
+
+ruleId: QG-018
+
+结构 runner 必须绑定 DOM 快照与实施快照，并把 region/component/target file 与机器合同交叉验证；交互 runner 必须逐用例绑定已登记 interaction ID 与非空断言。JSON 中 `NaN`、正负无穷及任何非有限阈值/指标均为无效输入。
