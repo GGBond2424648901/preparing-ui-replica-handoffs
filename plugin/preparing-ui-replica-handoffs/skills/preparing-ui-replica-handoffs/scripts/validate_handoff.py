@@ -108,6 +108,25 @@ PAGE_SECTION_IDS = frozenset(
         "qa-and-gaps",
     }
 )
+PAGE_SECTION_CONTRACT_FIELDS = {
+    "identity-and-evidence": (
+        "pageId",
+        "stateId",
+        "variantId",
+        "sourceAssetIds",
+        "route",
+        "evidenceLevel",
+        "status",
+    ),
+    "canvas-shell-regions": ("canvas", "shell", "regions"),
+    "layout-copy-icons-data": ("layoutRelationships", "copy", "icons", "data"),
+    "components-interactions-responsive": (
+        "components",
+        "interactions",
+        "responsiveVariants",
+    ),
+    "qa-and-gaps": ("acceptanceCriteria", "gapIds"),
+}
 SUPPORTED_IMAGE_SUFFIXES = frozenset({".gif", ".jpeg", ".jpg", ".png", ".webp"})
 PLACEHOLDER_VALUES = frozenset(
     {"", "unknown", "unclassified", "tbd", "todo", "n/a", "not-set"}
@@ -130,6 +149,47 @@ MACHINE_PATH_FIELDS = frozenset(
 LINK_PATTERN = re.compile(r"!?\[[^\]]*\]\(\s*<?([^\s>)]+)>?")
 URI_SCHEME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 WINDOWS_ABSOLUTE_PATTERN = re.compile(r"^[A-Za-z]:[\\/]|^\\\\")
+
+
+def _canonical_contract_hash(page: dict, section_id: str) -> str:
+    subset = {
+        field: page.get(field)
+        for field in PAGE_SECTION_CONTRACT_FIELDS[section_id]
+    }
+    canonical = json.dumps(
+        subset,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+
+def _resolved_absence_gap_ids(
+    page: dict, field: str, gap_rows: list[dict] | None
+) -> set[str]:
+    marker = f"[absence:{field}]".lower()
+    registry = {
+        row.get("gapId"): row
+        for row in (gap_rows or [])
+        if isinstance(row, dict) and row.get("gapId")
+    }
+    return {
+        gap_id
+        for gap_id in page.get("gapIds", [])
+        if str(registry.get(gap_id, {}).get("status", "")).lower()
+        in RESOLVED_GAP_STATUSES
+        and marker in str(registry.get(gap_id, {}).get("resolution", "")).lower()
+    }
+
+
+def _unique_nonempty_strings(values: object) -> bool:
+    return (
+        isinstance(values, list)
+        and all(isinstance(value, str) and value.strip() for value in values)
+        and len(values) == len(set(values))
+    )
 
 
 def _reject_nonfinite_json_constant(value: str) -> object:
@@ -632,7 +692,46 @@ def _check_page_documents(
             )
         )
 
+    def meaningful_prose(body: str, page: dict) -> str:
+        machine_ids: set[str] = set()
+
+        def collect_ids(value: object, key: str = "") -> None:
+            if isinstance(value, dict):
+                for child_key, child in value.items():
+                    collect_ids(child, child_key)
+            elif isinstance(value, list):
+                for child in value:
+                    collect_ids(child, key)
+            elif (
+                isinstance(value, str)
+                and (key.endswith("Id") or key.endswith("Ids"))
+            ):
+                machine_ids.add(value)
+
+        collect_ids(page)
+        machine_ids.add(_identity_text(_identity(page)))
+        prose = re.sub(r"(?m)^\s*(?:contractHash|sectionId):.*$", "", body)
+        prose = re.sub(r"(?m)^\s*#{1,6}\s+.*$", "", prose)
+        prose = re.sub(r"`[^`]*`", "", prose)
+        prose = re.sub(r"!?\[[^\]]*\]\([^)]*\)", "", prose)
+        prose = re.sub(r"sha256:[0-9a-fA-F]{64}", "", prose)
+        for machine_id in sorted(machine_ids, key=len, reverse=True):
+            prose = prose.replace(machine_id, "")
+        prose = re.sub(
+            r"\b(?:P\d{3,}|S\d{2,}|V\d{2,}|A\d{3,}|G\d{3,}|QA\d{3,}|(?:component|instance|interaction|region|layout|copy|icon|data|responsive)[-_][A-Za-z0-9_-]+)\b",
+            "",
+            prose,
+            flags=re.IGNORECASE,
+        )
+        return "".join(character for character in prose if character.isalnum())
+
     inventory = documents.get("contracts/page-inventory.json") or {}
+    registry = documents.get("contracts/component-registry.json") or {}
+    component_names = {
+        component.get("componentId"): component.get("name")
+        for component in registry.get("components", [])
+        if isinstance(component, dict) and component.get("componentId")
+    }
     pages = [page for page in inventory.get("pages", []) if isinstance(page, dict)]
     for page in sorted(pages, key=lambda item: _identity_text(_identity(item))):
         identity = _identity(page)
@@ -669,6 +768,82 @@ def _check_page_documents(
                             missingSectionIds=missing_sections,
                         )
                     )
+                if page.get("status") == "approved":
+                    locale_code = "zh-CN" if locale == "zh" else "en-US"
+                    for section_id in PAGE_SECTION_CONTRACT_FIELDS:
+                        body = bodies.get(section_id, "")
+                        expected_hash = _canonical_contract_hash(page, section_id)
+                        hashes = re.findall(
+                            r"(?m)^\s*contractHash:\s*(sha256:[0-9a-f]{64})\s*$",
+                            body,
+                        )
+                        if hashes != [expected_hash]:
+                            issues.append(
+                                _issue(
+                                    "PAGE_DOCUMENT_CONTRACT_HASH_MISMATCH",
+                                    relative_path,
+                                    "approved page section must contain exactly its canonical contract hash",
+                                    identity=name_prefix,
+                                    sectionId=section_id,
+                                    expectedContractHash=expected_hash,
+                                )
+                            )
+                        if len(meaningful_prose(body, page)) < 40:
+                            issues.append(
+                                _issue(
+                                    "PAGE_DOCUMENT_SECTION_PROSE_INSUFFICIENT",
+                                    relative_path,
+                                    "approved page section requires at least 40 meaningful locale characters",
+                                    identity=name_prefix,
+                                    sectionId=section_id,
+                                    locale=locale_code,
+                                )
+                            )
+                    localized_layout_values = {
+                        str(item.get("text", {}).get(locale_code))
+                        for item in page.get("copy", [])
+                        if isinstance(item, dict)
+                        and isinstance(item.get("text"), dict)
+                        and item.get("text", {}).get(locale_code)
+                    } | {
+                        str(item.get("valueShape"))
+                        for item in page.get("data", [])
+                        if isinstance(item, dict) and item.get("valueShape")
+                    }
+                    localized_behavior_values = {
+                        str(item.get("outcome", {}).get(locale_code))
+                        for item in page.get("interactions", [])
+                        if isinstance(item, dict)
+                        and isinstance(item.get("outcome"), dict)
+                        and item.get("outcome", {}).get(locale_code)
+                    } | {
+                        str(component_names.get(item.get("componentId"), {}).get(locale_code))
+                        for item in page.get("components", [])
+                        if isinstance(item, dict)
+                        and isinstance(component_names.get(item.get("componentId")), dict)
+                        and component_names.get(item.get("componentId"), {}).get(locale_code)
+                    }
+                    missing_localized = sorted(
+                        value
+                        for value in localized_layout_values
+                        if value not in bodies.get("layout-copy-icons-data", "")
+                    ) + sorted(
+                        value
+                        for value in localized_behavior_values
+                        if value
+                        not in bodies.get("components-interactions-responsive", "")
+                    )
+                    if missing_localized:
+                        issues.append(
+                            _issue(
+                                "PAGE_DOCUMENT_LOCALIZED_CONTENT_MISSING",
+                                relative_path,
+                                "approved page sections must include locale copy, value shapes, component names, and interaction outcomes",
+                                identity=name_prefix,
+                                locale=locale_code,
+                                missingValues=missing_localized,
+                            )
+                        )
                 require_values(
                     bodies.get("identity-and-evidence", ""),
                     {name_prefix, *(str(value) for value in page.get("sourceAssetIds", []))},
@@ -785,21 +960,6 @@ def _check_semantic_readiness(
         for component in registry.get("components", [])
         if isinstance(component, dict) and component.get("componentId")
     }
-    gap_registry = {
-        row.get("gapId"): row
-        for row in (gap_rows or [])
-        if isinstance(row, dict) and row.get("gapId")
-    }
-
-    def has_resolved_absence(page: dict, field: str) -> bool:
-        marker = f"[absence:{field}]".lower()
-        return any(
-            str(gap_registry.get(gap_id, {}).get("status", "")).lower()
-            in RESOLVED_GAP_STATUSES
-            and marker
-            in str(gap_registry.get(gap_id, {}).get("resolution", "")).lower()
-            for gap_id in page.get("gapIds", [])
-        )
     component_instances = [
         component
         for page in pages
@@ -840,7 +1000,7 @@ def _check_semantic_readiness(
             "data",
             "interactions",
         ):
-            if page.get(field) or has_resolved_absence(page, field):
+            if page.get(field) or _resolved_absence_gap_ids(page, field, gap_rows):
                 continue
             issues.append(
                 _issue(
@@ -953,6 +1113,83 @@ def _check_implementation_coverage(
                 f"implementation mapping is missing for {_identity_text(identity)}",
             )
         )
+    inventory = documents.get("contracts/page-inventory.json") or {}
+    pages = {
+        _identity(page): page
+        for page in inventory.get("pages", [])
+        if isinstance(page, dict)
+    }
+    for mapping in implementation.get("mappings", []):
+        if not isinstance(mapping, dict) or mapping.get("status") != "approved":
+            continue
+        identity = _identity(mapping)
+        page = pages.get(identity)
+        if page is None:
+            continue
+        raw_target_files = mapping.get("targetFiles")
+        target_files_valid = _unique_nonempty_strings(raw_target_files)
+        target_files = set(raw_target_files) if target_files_valid else set()
+        region_mappings = mapping.get("regionMappings")
+        component_mappings = mapping.get("componentMappings")
+        expected_regions = {
+            region.get("regionId")
+            for region in page.get("regions", [])
+            if isinstance(region, dict) and region.get("regionId")
+        }
+        expected_components = {
+            (component.get("instanceId"), component.get("componentId"))
+            for component in page.get("components", [])
+            if isinstance(component, dict)
+        }
+        actual_regions = [
+            item.get("regionId")
+            for item in region_mappings or []
+            if isinstance(item, dict)
+        ]
+        actual_components = [
+            (item.get("instanceId"), item.get("componentId"))
+            for item in component_mappings or []
+            if isinstance(item, dict)
+        ]
+        region_ids_valid = all(
+            isinstance(region_id, str) and region_id
+            for region_id in actual_regions
+        )
+        component_ids_valid = all(
+            isinstance(instance_id, str)
+            and instance_id
+            and isinstance(component_id, str)
+            and component_id
+            for instance_id, component_id in actual_components
+        )
+        mapping_files_valid = all(
+            isinstance(item, dict)
+            and item.get("targetFile") in target_files
+            for item in [*(region_mappings or []), *(component_mappings or [])]
+        )
+        exact = (
+            isinstance(region_mappings, list)
+            and isinstance(component_mappings, list)
+            and target_files_valid
+            and region_ids_valid
+            and component_ids_valid
+            and len(actual_regions) == len(region_mappings) == len(set(actual_regions))
+            and set(actual_regions) == expected_regions
+            and len(actual_components)
+            == len(component_mappings)
+            == len(set(actual_components))
+            and set(actual_components) == expected_components
+            and mapping_files_valid
+        )
+        if not exact:
+            issues.append(
+                _issue(
+                    "IMPLEMENTATION_MAPPING_COVERAGE_MISMATCH",
+                    "contracts/implementation-map.json",
+                    "approved region/component mappings must exactly and uniquely cover the page contract and target approved files",
+                    identity=_identity_text(identity),
+                )
+            )
 
 
 def _load_qa_image(path: Path) -> Image.Image:
@@ -1064,6 +1301,7 @@ def _check_qa_evidence_records(
     documents: dict[str, dict],
     qa_rows: list[dict] | None,
     requirement_rows: list[dict] | None,
+    gap_rows: list[dict] | None,
     issues: list[dict],
 ) -> None:
     inventory = documents.get("contracts/page-inventory.json") or {}
@@ -1649,53 +1887,115 @@ def _check_qa_evidence_records(
             page_region_ids = {
                 region.get("regionId")
                 for region in page.get("regions", [])
-                if isinstance(region, dict)
+                if isinstance(region, dict) and region.get("regionId")
             }
-            page_component_ids = {
-                component.get("componentId")
+            expected_components = {
+                (
+                    component.get("instanceId"),
+                    component.get("componentId"),
+                    component.get("regionId"),
+                )
                 for component in page.get("components", [])
                 if isinstance(component, dict)
             }
+            page_component_ids = {item[1] for item in expected_components}
+            component_absence_gaps = _resolved_absence_gap_ids(
+                page, "components", gap_rows
+            )
             if dom_snapshot is not None:
                 nodes = dom_snapshot.get("nodes")
                 dom_identity_matches = all(
                     dom_snapshot.get(field) == row.get(field)
                     for field in ("pageId", "stateId", "variantId")
                 )
+                node_ids = [
+                    node.get("nodeId")
+                    for node in nodes or []
+                    if isinstance(node, dict)
+                ]
+                region_nodes = [
+                    node
+                    for node in nodes or []
+                    if isinstance(node, dict) and node.get("nodeType") == "region"
+                ]
+                component_nodes = [
+                    node
+                    for node in nodes or []
+                    if isinstance(node, dict)
+                    and node.get("nodeType") == "component"
+                ]
+                actual_regions = [node.get("regionId") for node in region_nodes]
+                actual_components = [
+                    (
+                        node.get("instanceId"),
+                        node.get("componentId"),
+                        node.get("regionId"),
+                    )
+                    for node in component_nodes
+                ]
+                regions_valid = all(
+                    isinstance(region_id, str) and region_id
+                    for region_id in actual_regions
+                )
+                components_valid = all(
+                    all(isinstance(value, str) and value for value in component)
+                    for component in actual_components
+                )
                 dom_nodes_match = (
                     isinstance(nodes, list)
-                    and bool(nodes)
-                    and all(
-                        isinstance(node, dict)
-                        and node.get("regionId") in page_region_ids
-                        and node.get("componentId") in page_component_ids
-                        and node.get("componentId") in registry_ids
-                        for node in nodes
-                    )
+                    and all(isinstance(node, dict) for node in nodes)
+                    and _unique_nonempty_strings(node_ids)
+                    and len(node_ids) == len(nodes)
+                    and len(region_nodes) + len(component_nodes) == len(nodes)
+                    and regions_valid
+                    and len(actual_regions) == len(set(actual_regions))
+                    and set(actual_regions) == page_region_ids
+                    and components_valid
+                    and len(actual_components) == len(set(actual_components))
+                    and set(actual_components) == expected_components
+                    and page_component_ids.issubset(registry_ids)
+                    and (not component_absence_gaps or not component_nodes)
                 )
                 if not dom_identity_matches or not dom_nodes_match:
                     issues.append(
                         _issue(
+                            "QA_STRUCTURAL_DOM_COVERAGE_MISMATCH",
+                            str(runner_relative),
+                            "DOM snapshot must uniquely and exactly cover typed page region and component instances",
+                            qaId=qa_id,
+                        )
+                    )
+                    issues.append(
+                        _issue(
                             "QA_STRUCTURAL_DOM_BINDING_MISMATCH",
                             str(runner_relative),
-                            "DOM snapshot identity and node regionId/componentId values must resolve",
+                            "DOM snapshot identity and typed region/component bindings must resolve exactly",
                             qaId=qa_id,
                         )
                     )
             mapping = implementations.get(identity) or {}
             if implementation_snapshot is not None:
                 entries = implementation_snapshot.get("entries")
-                expected_targets = set(mapping.get("targetFiles") or [])
-                actual_targets = {
+                raw_expected_targets = mapping.get("targetFiles")
+                expected_targets_valid = _unique_nonempty_strings(
+                    raw_expected_targets
+                )
+                expected_targets = (
+                    set(raw_expected_targets) if expected_targets_valid else set()
+                )
+                actual_targets = [
                     entry.get("targetFile")
                     for entry in entries or []
                     if isinstance(entry, dict)
-                }
+                ]
                 entries_valid = (
                     mapping.get("status") == "approved"
                     and isinstance(entries, list)
                     and bool(entries)
-                    and actual_targets == expected_targets
+                    and expected_targets_valid
+                    and _unique_nonempty_strings(actual_targets)
+                    and len(actual_targets) == len(entries)
+                    and set(actual_targets) == expected_targets
                     and all(
                         isinstance(entry, dict)
                         and _safe_relative_path(entry.get("targetFile"))
@@ -1723,35 +2023,132 @@ def _check_qa_evidence_records(
                             qaId=qa_id,
                         )
                     )
-            assertions_by_type = {
-                assertion.get("checkType"): assertion
-                for assertion in runner_assertions
-            }
-            required_assertions = {
-                "requirement-map",
-                "region-map",
-                "component-map",
-            }
-            runner_requirement_ids = requirement_ids_by_identity.get(identity, set())
-            runner_assertions_valid = (
-                required_assertions.issubset(assertions_by_type)
-                and assertions_by_type.get("requirement-map", {}).get(
-                    "requirementId"
+                def normalized_mappings(value: object) -> list[str] | None:
+                    if not isinstance(value, list) or not all(
+                        isinstance(item, dict) for item in value
+                    ):
+                        return None
+                    return [
+                        json.dumps(
+                            item,
+                            ensure_ascii=False,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                            allow_nan=False,
+                        )
+                        for item in value
+                    ]
+
+                snapshot_regions = normalized_mappings(
+                    implementation_snapshot.get("regionMappings")
                 )
-                in runner_requirement_ids
-                and assertions_by_type.get("region-map", {}).get("regionId")
-                in page_region_ids
-                and assertions_by_type.get("component-map", {}).get("componentId")
-                in page_component_ids
-                and assertions_by_type.get("component-map", {}).get("componentId")
-                in registry_ids
+                snapshot_components = normalized_mappings(
+                    implementation_snapshot.get("componentMappings")
+                )
+                approved_regions = normalized_mappings(mapping.get("regionMappings"))
+                approved_components = normalized_mappings(
+                    mapping.get("componentMappings")
+                )
+                mappings_valid = (
+                    snapshot_regions is not None
+                    and snapshot_components is not None
+                    and approved_regions is not None
+                    and approved_components is not None
+                    and len(snapshot_regions) == len(set(snapshot_regions))
+                    and set(snapshot_regions) == set(approved_regions)
+                    and len(snapshot_components) == len(set(snapshot_components))
+                    and set(snapshot_components) == set(approved_components)
+                    and (not component_absence_gaps or not snapshot_components)
+                )
+                if not mappings_valid:
+                    issues.append(
+                        _issue(
+                            "QA_STRUCTURAL_IMPLEMENTATION_MAPPING_MISMATCH",
+                            str(runner_relative),
+                            "implementation snapshot mappings must uniquely equal every approved region/component mapping",
+                            qaId=qa_id,
+                        )
+                    )
+            runner_requirement_ids = requirement_ids_by_identity.get(identity, set())
+            requirement_mappings = runner.get("requirementMappings")
+            requirement_coverage_valid = (
+                _unique_nonempty_strings(requirement_mappings)
+                and set(requirement_mappings) == runner_requirement_ids
+            )
+            if not requirement_coverage_valid:
+                issues.append(
+                    _issue(
+                        "QA_STRUCTURAL_REQUIREMENT_COVERAGE_MISMATCH",
+                        str(runner_relative),
+                        "runner requirementMappings must uniquely and exactly cover target ledger requirements",
+                        qaId=qa_id,
+                    )
+                )
+
+            def assertion_entity(assertion: dict) -> tuple | None:
+                check_type = assertion.get("checkType")
+                if check_type == "requirement-map":
+                    value = assertion.get("requirementId")
+                    return (check_type, value) if _nonplaceholder_text(value) else None
+                if check_type == "region-map":
+                    value = assertion.get("regionId")
+                    return (check_type, value) if _nonplaceholder_text(value) else None
+                if check_type == "component-map":
+                    values = (
+                        assertion.get("instanceId"), assertion.get("componentId")
+                    )
+                    return (
+                        (check_type, *values)
+                        if all(_nonplaceholder_text(value) for value in values)
+                        else None
+                    )
+                if check_type == "absence-check":
+                    values = (assertion.get("field"), assertion.get("gapId"))
+                    return (
+                        (check_type, *values)
+                        if all(_nonplaceholder_text(value) for value in values)
+                        else None
+                    )
+                return None
+
+            expected_assertions = {
+                *(
+                    ("requirement-map", requirement_id)
+                    for requirement_id in runner_requirement_ids
+                ),
+                *(("region-map", region_id) for region_id in page_region_ids),
+                *(
+                    ("component-map", instance_id, component_id)
+                    for instance_id, component_id, _region_id in expected_components
+                ),
+            }
+            if component_absence_gaps:
+                expected_assertions |= {
+                    ("absence-check", "components", gap_id)
+                    for gap_id in component_absence_gaps
+                }
+            actual_assertions = [
+                assertion_entity(assertion) for assertion in runner_assertions
+            ]
+            absence_assertions_valid = all(
+                assertion.get("actualInstanceIds") == []
+                and assertion.get("actualComponentIds") == []
+                for assertion in runner_assertions
+                if assertion.get("checkType") == "absence-check"
+                and assertion.get("field") == "components"
+            )
+            runner_assertions_valid = (
+                all(entity is not None for entity in actual_assertions)
+                and len(actual_assertions) == len(set(actual_assertions))
+                and set(actual_assertions) == expected_assertions
+                and absence_assertions_valid
             )
             if not runner_assertions_valid:
                 issues.append(
                     _issue(
                         "QA_STRUCTURAL_RUNNER_ASSERTIONS_INVALID",
                         str(runner_relative),
-                        "structural runner requires resolving requirement/region/component assertions",
+                        "structural assertions must uniquely and exactly cover every required mapping entity and approved absence",
                         qaId=qa_id,
                     )
                 )
@@ -1772,13 +2169,25 @@ def _check_qa_evidence_records(
                 for interaction in page.get("interactions", [])
                 if isinstance(interaction, dict)
             }
-            cases_valid = isinstance(test_cases, list) and bool(test_cases)
+            interaction_absence_gaps = _resolved_absence_gap_ids(
+                page, "interactions", gap_rows
+            )
+            cases_valid = isinstance(test_cases, list) and (
+                bool(test_cases) or bool(interaction_absence_gaps)
+            )
             covered_ids = set()
+            case_ids = []
             for index, test_case in enumerate(test_cases or []):
                 if not isinstance(test_case, dict):
                     cases_valid = False
                     continue
-                covered_ids.add(test_case.get("interactionId"))
+                test_case_id = test_case.get("testCaseId")
+                interaction_id = test_case.get("interactionId")
+                case_ids.append(test_case_id)
+                if _nonplaceholder_text(interaction_id):
+                    covered_ids.add(interaction_id)
+                else:
+                    cases_valid = False
                 assertions = test_case.get("assertions")
                 if test_case.get("status") != "pass":
                     cases_valid = False
@@ -1806,14 +2215,63 @@ def _check_qa_evidence_records(
                             qaId=qa_id,
                         )
                     )
-            if covered_ids != page_interaction_ids:
+            if (
+                covered_ids != page_interaction_ids
+                or not _unique_nonempty_strings(case_ids)
+                or len(test_cases or []) != len(page_interaction_ids)
+            ):
+                cases_valid = False
+            expected_interaction_assertions = (
+                {
+                    ("absence-check", "interactions", gap_id)
+                    for gap_id in interaction_absence_gaps
+                }
+                if interaction_absence_gaps
+                else {
+                    ("interaction-case", interaction_id)
+                    for interaction_id in page_interaction_ids
+                }
+            )
+            actual_interaction_assertions = [
+                (
+                    assertion.get("checkType"),
+                    assertion.get("field"),
+                    assertion.get("gapId"),
+                )
+                if assertion.get("checkType") == "absence-check"
+                and _nonplaceholder_text(assertion.get("field"))
+                and _nonplaceholder_text(assertion.get("gapId"))
+                else (
+                    assertion.get("checkType"),
+                    assertion.get("interactionId"),
+                )
+                if assertion.get("checkType") == "interaction-case"
+                and _nonplaceholder_text(assertion.get("interactionId"))
+                else None
+                for assertion in runner_assertions
+            ]
+            absence_assertions_valid = all(
+                assertion.get("actualInteractionIds") == []
+                and assertion.get("actualCaseCount") == 0
+                for assertion in runner_assertions
+                if assertion.get("checkType") == "absence-check"
+                and assertion.get("field") == "interactions"
+            )
+            if (
+                any(assertion is None for assertion in actual_interaction_assertions)
+                or len(actual_interaction_assertions)
+                != len(set(actual_interaction_assertions))
+                or set(actual_interaction_assertions)
+                != expected_interaction_assertions
+                or not absence_assertions_valid
+            ):
                 cases_valid = False
             if not cases_valid:
                 issues.append(
                     _issue(
                         "QA_INTERACTION_TEST_CASES_INVALID",
                         str(runner_relative),
-                        "interaction runner must cover every page interaction with passing cases",
+                        "interaction runner must exactly cover page interactions, or prove a resolved interaction absence",
                         qaId=qa_id,
                     )
                 )
@@ -1836,83 +2294,196 @@ def _check_qa_evidence_records(
                     )
 
         if row.get("evidenceType") == "structural":
-            checks_by_type = {
-                check.get("checkType"): check
-                for check in checks
-                if isinstance(check, dict)
+            page_region_ids = {
+                region.get("regionId")
+                for region in page.get("regions", [])
+                if isinstance(region, dict) and region.get("regionId")
             }
-            required_types = {"requirement-map", "region-map", "component-map"}
-            if not required_types.issubset(checks_by_type):
+            page_components = {
+                (component.get("instanceId"), component.get("componentId"))
+                for component in page.get("components", [])
+                if isinstance(component, dict)
+            }
+            component_absence_gaps = _resolved_absence_gap_ids(
+                page, "components", gap_rows
+            )
+            expected_checks = {
+                *(
+                    ("requirement-map", requirement_id)
+                    for requirement_id in requirement_ids_by_identity.get(identity, set())
+                ),
+                *(("region-map", region_id) for region_id in page_region_ids),
+                *(
+                    ("component-map", instance_id, component_id)
+                    for instance_id, component_id in page_components
+                ),
+            }
+            if component_absence_gaps:
+                expected_checks |= {
+                    ("absence-check", "components", gap_id)
+                    for gap_id in component_absence_gaps
+                }
+
+            def check_entity(check: dict) -> tuple | None:
+                check_type = check.get("checkType")
+                if check_type == "requirement-map":
+                    value = check.get("requirementId")
+                    return (check_type, value) if _nonplaceholder_text(value) else None
+                if check_type == "region-map":
+                    value = check.get("regionId")
+                    return (check_type, value) if _nonplaceholder_text(value) else None
+                if check_type == "component-map":
+                    values = (check.get("instanceId"), check.get("componentId"))
+                    return (
+                        (check_type, *values)
+                        if all(_nonplaceholder_text(value) for value in values)
+                        else None
+                    )
+                if check_type == "absence-check":
+                    values = (check.get("field"), check.get("gapId"))
+                    return (
+                        (check_type, *values)
+                        if all(_nonplaceholder_text(value) for value in values)
+                        else None
+                    )
+                return None
+
+            actual_checks = [
+                check_entity(check) for check in checks if isinstance(check, dict)
+            ]
+            for check in checks:
+                if not isinstance(check, dict):
+                    continue
+                if (
+                    check.get("checkType") == "requirement-map"
+                    and check.get("requirementId")
+                    not in requirement_ids_by_identity.get(identity, set())
+                ):
+                    issues.append(
+                        _issue(
+                            "QA_STRUCTURAL_REQUIREMENT_NOT_FOUND",
+                            record_relative,
+                            "structural requirementId does not resolve for the target",
+                            qaId=qa_id,
+                        )
+                    )
+                elif (
+                    check.get("checkType") == "region-map"
+                    and check.get("regionId") not in page_region_ids
+                ):
+                    issues.append(
+                        _issue(
+                            "QA_STRUCTURAL_REGION_NOT_FOUND",
+                            record_relative,
+                            "structural regionId does not resolve for the target",
+                            qaId=qa_id,
+                        )
+                    )
+                elif check.get("checkType") == "component-map":
+                    component = (
+                        check.get("instanceId"),
+                        check.get("componentId"),
+                    )
+                    if component not in page_components or component[1] not in registry_ids:
+                        issues.append(
+                            _issue(
+                                "QA_STRUCTURAL_COMPONENT_NOT_FOUND",
+                                record_relative,
+                                "structural instance/component IDs must resolve in the page and registry",
+                                qaId=qa_id,
+                            )
+                        )
+            checks_valid = (
+                len(actual_checks) == len(checks)
+                and all(entity is not None for entity in actual_checks)
+                and len(actual_checks) == len(set(actual_checks))
+                and set(actual_checks) == expected_checks
+                and all(component_id in registry_ids for _, component_id in page_components)
+                and all(
+                    check.get("actualInstanceIds") == []
+                    and check.get("actualComponentIds") == []
+                    for check in checks
+                    if isinstance(check, dict)
+                    and check.get("checkType") == "absence-check"
+                    and check.get("field") == "components"
+                )
+            )
+            if not checks_valid:
                 issues.append(
                     _issue(
                         "QA_STRUCTURAL_CHECK_COVERAGE_MISSING",
                         record_relative,
-                        "structural evidence requires requirement, region, and component mappings",
-                        qaId=qa_id,
-                    )
-                )
-            requirement_check = checks_by_type.get("requirement-map", {})
-            if requirement_check.get("requirementId") not in requirement_ids_by_identity.get(identity, set()):
-                issues.append(
-                    _issue(
-                        "QA_STRUCTURAL_REQUIREMENT_NOT_FOUND",
-                        record_relative,
-                        "structural requirementId does not resolve for the target",
-                        qaId=qa_id,
-                    )
-                )
-            page_region_ids = {
-                region.get("regionId")
-                for region in page.get("regions", [])
-                if isinstance(region, dict)
-            }
-            if checks_by_type.get("region-map", {}).get("regionId") not in page_region_ids:
-                issues.append(
-                    _issue(
-                        "QA_STRUCTURAL_REGION_NOT_FOUND",
-                        record_relative,
-                        "structural regionId does not resolve for the target",
-                        qaId=qa_id,
-                    )
-                )
-            page_component_ids = {
-                component.get("componentId")
-                for component in page.get("components", [])
-                if isinstance(component, dict)
-            }
-            component_id = checks_by_type.get("component-map", {}).get("componentId")
-            if component_id not in page_component_ids or component_id not in registry_ids:
-                issues.append(
-                    _issue(
-                        "QA_STRUCTURAL_COMPONENT_NOT_FOUND",
-                        record_relative,
-                        "structural componentId must resolve in both page and registry",
+                        "structural evidence checks must uniquely and exactly cover every requirement, region, component, and approved absence",
                         qaId=qa_id,
                     )
                 )
         elif row.get("evidenceType") == "interaction":
-            interaction_checks = [
-                check
-                for check in checks
-                if isinstance(check, dict)
-                and check.get("checkType") == "interaction-case"
-            ]
             page_interaction_ids = {
                 interaction.get("interactionId")
                 for interaction in page.get("interactions", [])
                 if isinstance(interaction, dict)
             }
-            if not interaction_checks:
+            interaction_absence_gaps = _resolved_absence_gap_ids(
+                page, "interactions", gap_rows
+            )
+            expected_checks = (
+                {
+                    ("absence-check", "interactions", gap_id)
+                    for gap_id in interaction_absence_gaps
+                }
+                if interaction_absence_gaps
+                else {
+                    ("interaction-case", interaction_id)
+                    for interaction_id in page_interaction_ids
+                }
+            )
+            actual_checks = []
+            for check in checks:
+                if not isinstance(check, dict):
+                    actual_checks.append(None)
+                elif check.get("checkType") == "interaction-case":
+                    value = check.get("interactionId")
+                    actual_checks.append(
+                        ("interaction-case", value)
+                        if _nonplaceholder_text(value)
+                        else None
+                    )
+                elif check.get("checkType") == "absence-check":
+                    values = (check.get("field"), check.get("gapId"))
+                    actual_checks.append(
+                        ("absence-check", *values)
+                        if all(_nonplaceholder_text(value) for value in values)
+                        else None
+                    )
+                else:
+                    actual_checks.append(None)
+            if (
+                any(check is None for check in actual_checks)
+                or len(actual_checks) != len(set(actual_checks))
+                or set(actual_checks) != expected_checks
+                or not all(
+                    check.get("actualInteractionIds") == []
+                    and check.get("actualCaseCount") == 0
+                    for check in checks
+                    if isinstance(check, dict)
+                    and check.get("checkType") == "absence-check"
+                    and check.get("field") == "interactions"
+                )
+            ):
                 issues.append(
                     _issue(
                         "QA_INTERACTION_CHECK_REQUIRED",
                         record_relative,
-                        "interaction evidence requires at least one interaction-case check",
+                        "interaction evidence must exactly cover interactions or a resolved absence",
                         qaId=qa_id,
                     )
                 )
-            for check in interaction_checks:
-                if check.get("interactionId") not in page_interaction_ids:
+            for check in checks:
+                if (
+                    isinstance(check, dict)
+                    and check.get("checkType") == "interaction-case"
+                    and check.get("interactionId") not in page_interaction_ids
+                ):
                     issues.append(
                         _issue(
                             "QA_INTERACTION_NOT_FOUND",
@@ -2552,14 +3123,15 @@ def validate_handoff(
             _check_bilingual(handoff_root, issues)
             _check_capture_profiles(documents, issues)
             _check_diff_and_qa(documents, qa_rows, identities, issues)
+            gap_rows = csv_documents.get("contracts/gap-register.csv")
             _check_qa_evidence_records(
                 handoff_root,
                 documents,
                 qa_rows,
                 csv_documents.get("contracts/requirement-ledger.csv"),
+                gap_rows,
                 issues,
             )
-            gap_rows = csv_documents.get("contracts/gap-register.csv")
             _check_semantic_readiness(documents, gap_rows, issues)
             _check_gap_integrity(
                 documents,
