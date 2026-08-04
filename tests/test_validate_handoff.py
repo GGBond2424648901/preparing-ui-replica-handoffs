@@ -770,6 +770,12 @@ def _resolve_generated_skeleton(handoff):
 
 
 class ValidateHandoffTests(unittest.TestCase):
+    def test_locale_word_frequency_check_is_linear_time(self):
+        validator_source = VALIDATE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("Counter(words).most_common(1)", validator_source)
+        self.assertNotIn("words.count(", validator_source)
+
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary_directory.cleanup)

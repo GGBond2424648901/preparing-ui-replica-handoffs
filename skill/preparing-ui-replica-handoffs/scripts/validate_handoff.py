@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import csv
 from datetime import datetime
 import hashlib
@@ -739,7 +740,7 @@ def _check_page_documents(
             words = [word.casefold() for word in re.findall(r"[A-Za-z]+", prose)]
             if len(words) < 8 or len(set(words)) < 5:
                 return ""
-            if max(words.count(word) for word in set(words)) / len(words) > 0.4:
+            if Counter(words).most_common(1)[0][1] / len(words) > 0.4:
                 return ""
         return normalized
 
