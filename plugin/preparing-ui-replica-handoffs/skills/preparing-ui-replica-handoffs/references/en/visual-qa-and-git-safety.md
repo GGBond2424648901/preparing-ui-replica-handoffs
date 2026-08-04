@@ -79,3 +79,11 @@ sectionId: release-gate
 ruleId: QG-014
 
 Before release, run bilingual, structural, Schema, path, hash, design-lock, coverage, QA, gap, and optional Git allowlist checks. Record result, command, time, tool version, and open items without leaking machine absolute paths into the report.
+
+ruleId: QG-015
+
+Every passing QA row references a SHA-256-bound machine-readable evidence record. It binds QA/page/state/variant/evidence type, tool, replayable command, actual artifact paths and hashes, and per-check results; arbitrary images or a handwritten `pass` are not passing evidence.
+
+ruleId: QG-016
+
+For visual pass, the validator decodes reference/current, recomputes overlay/diff and pixel-difference ratio, and compares it with region tolerance. Structural pass maps requirements, regions, and components to real contracts. Interaction pass cites replayable cases for page-declared interaction IDs. All three results are derived from evidence, not trusted declarations.

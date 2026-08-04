@@ -99,3 +99,11 @@ Claim implementation readiness only when sources are unchanged, bilingual covera
 ruleId: DP-016
 
 When unknowns remain, the package may still be delivered as an “initial handoff,” but README and validation report must state incomplete/failed, list each `gapId`, and identify next steps. Never claim “fully replicated” or “no inference required.”
+
+ruleId: DP-017
+
+Implementation-readiness validation requires the caller to supply the original design directory and rechecks the source set plus every source-image hash. The package stores only relative source paths, never the creating machine's absolute path. Missing source input fails validation and is not an “offline waiver.”
+
+ruleId: DP-018
+
+An approved page's machine contract and both page documents contain substantive, cross-referenced regions, layout, copy, components, data, and interactions, with component instances resolving to a nonempty registry. A truly absent category requires a resolved page-linked gap explicitly marked `[absence:<field>]`; an empty array does not pass by default.

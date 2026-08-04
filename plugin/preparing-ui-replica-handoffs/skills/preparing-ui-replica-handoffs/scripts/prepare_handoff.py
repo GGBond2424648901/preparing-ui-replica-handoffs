@@ -962,6 +962,8 @@ def _build_csv_documents(assets: list[dict]) -> dict[str, bytes]:
         "currentPath",
         "overlayPath",
         "diffPath",
+        "evidenceRecordPath",
+        "evidenceRecordSha256",
         "status",
         "notesZh",
         "notesEn",
@@ -1015,6 +1017,8 @@ def _build_csv_documents(assets: list[dict]) -> dict[str, bytes]:
                     "currentPath": "",
                     "overlayPath": "",
                     "diffPath": "",
+                    "evidenceRecordPath": "",
+                    "evidenceRecordSha256": "",
                     "status": "not-run",
                     "notesZh": "等待实现与验证",
                     "notesEn": "Awaiting implementation and validation",
@@ -1094,7 +1098,7 @@ def _build_generated_files(
             }
         ),
         "tools/validate-command.txt": (
-            "python validate_handoff.py --handoff-root .\n"
+            'python validate_handoff.py --handoff-root . --source-root "<SOURCE_ROOT>"\n'
         ).encode("utf-8"),
     }
     files.update(_build_csv_documents(assets))
