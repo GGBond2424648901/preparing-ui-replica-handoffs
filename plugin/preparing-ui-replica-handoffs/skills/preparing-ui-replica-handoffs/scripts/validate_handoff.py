@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+from datetime import datetime
 import hashlib
 import io
 import json
@@ -131,6 +132,22 @@ URI_SCHEME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 WINDOWS_ABSOLUTE_PATTERN = re.compile(r"^[A-Za-z]:[\\/]|^\\\\")
 
 
+def _reject_nonfinite_json_constant(value: str) -> object:
+    raise ValueError(f"non-finite JSON number is forbidden: {value}")
+
+
+def _strict_json_loads(text: str) -> object:
+    return json.loads(text, parse_constant=_reject_nonfinite_json_constant)
+
+
+def _is_finite_number(value: object) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+    )
+
+
 def _issue(code: str, path: str, message: str, **details: object) -> dict:
     return {
         "code": code,
@@ -186,8 +203,8 @@ def _resolve_within(root: Path, relative_path: str) -> Path | None:
 
 def _load_json(path: Path, relative_path: str, issues: list[dict]) -> dict | None:
     try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        document = _strict_json_loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
         issues.append(_issue("MALFORMED_JSON", relative_path, str(error)))
         return None
     if not isinstance(document, dict):
@@ -221,7 +238,9 @@ def _validate_schemas(documents: dict[str, dict], issues: list[dict]) -> None:
         if document is None:
             continue
         try:
-            schema = json.loads((SCHEMA_ROOT / schema_name).read_text(encoding="utf-8"))
+            schema = _strict_json_loads(
+                (SCHEMA_ROOT / schema_name).read_text(encoding="utf-8")
+            )
             validator = Draft202012Validator(schema, format_checker=FormatChecker())
             errors = sorted(validator.iter_errors(document), key=lambda error: list(error.path))
         except Exception as error:
@@ -550,6 +569,69 @@ def _check_page_documents(
     documents: dict[str, dict],
     issues: list[dict],
 ) -> None:
+    def section_bodies(text: str) -> dict[str, str]:
+        matches = list(
+            re.finditer(r"(?m)^\s*sectionId:\s*([^\s]+)\s*$", text)
+        )
+        return {
+            match.group(1): text[
+                match.end() : matches[index + 1].start()
+                if index + 1 < len(matches)
+                else len(text)
+            ]
+            for index, match in enumerate(matches)
+        }
+
+    def referenced_gap_ids(value: object) -> set[str]:
+        found: set[str] = set()
+        if isinstance(value, dict):
+            if isinstance(value.get("gapId"), str):
+                found.add(value["gapId"])
+            for gap_id in value.get("gapIds") or []:
+                if isinstance(gap_id, str):
+                    found.add(gap_id)
+            for child in value.values():
+                found.update(referenced_gap_ids(child))
+        elif isinstance(value, list):
+            for child in value:
+                found.update(referenced_gap_ids(child))
+        return found
+
+    def require_values(
+        body: str,
+        values: set[str],
+        relative_path: str,
+        identity_name: str,
+        section_id: str,
+        field: str,
+        issues: list[dict],
+    ) -> None:
+        missing = sorted(value for value in values if value not in body)
+        if not missing:
+            return
+        details = {
+            "identity": identity_name,
+            "sectionId": section_id,
+            "field": field,
+            "missingIds": missing,
+        }
+        issues.append(
+            _issue(
+                "PAGE_DOCUMENT_SECTION_REFERENCE_MISSING",
+                relative_path,
+                "page document section is missing required machine IDs or absence marker",
+                **details,
+            )
+        )
+        issues.append(
+            _issue(
+                "PAGE_DOCUMENT_REFERENCE_MISSING",
+                relative_path,
+                "page document does not mention every machine contract ID in its required section",
+                **details,
+            )
+        )
+
     inventory = documents.get("contracts/page-inventory.json") or {}
     pages = [page for page in inventory.get("pages", []) if isinstance(page, dict)]
     for page in sorted(pages, key=lambda item: _identity_text(_identity(item))):
@@ -574,9 +656,8 @@ def _check_page_documents(
                     text = page_document.read_text(encoding="utf-8")
                 except (OSError, UnicodeError):
                     continue
-                present_sections = set(
-                    re.findall(r"(?m)^\s*sectionId:\s*([^\s]+)\s*$", text)
-                )
+                bodies = section_bodies(text)
+                present_sections = set(bodies)
                 missing_sections = sorted(PAGE_SECTION_IDS - present_sections)
                 if missing_sections:
                     issues.append(
@@ -588,34 +669,107 @@ def _check_page_documents(
                             missingSectionIds=missing_sections,
                         )
                     )
-                machine_ids = {
-                    str(region.get("regionId"))
-                    for region in page.get("regions", [])
-                    if isinstance(region, dict) and region.get("regionId")
-                }
-                machine_ids.update(
-                    str(component.get("componentId"))
-                    for component in page.get("components", [])
-                    if isinstance(component, dict) and component.get("componentId")
+                require_values(
+                    bodies.get("identity-and-evidence", ""),
+                    {name_prefix, *(str(value) for value in page.get("sourceAssetIds", []))},
+                    relative_path,
+                    name_prefix,
+                    "identity-and-evidence",
+                    "identity",
+                    issues,
                 )
-                machine_ids.update(
-                    str(interaction.get("interactionId"))
-                    for interaction in page.get("interactions", [])
-                    if isinstance(interaction, dict) and interaction.get("interactionId")
+                require_values(
+                    bodies.get("canvas-shell-regions", ""),
+                    {
+                        str(page.get("shell", {}).get("shellId")),
+                        *(
+                            str(region.get("regionId"))
+                            for region in page.get("regions", [])
+                            if isinstance(region, dict) and region.get("regionId")
+                        ),
+                    },
+                    relative_path,
+                    name_prefix,
+                    "canvas-shell-regions",
+                    "canvasShellRegions",
+                    issues,
                 )
-                missing_ids = sorted(
-                    identifier for identifier in machine_ids if identifier not in text
+                section_contracts = (
+                    (
+                        "layout-copy-icons-data",
+                        "layoutRelationships",
+                        "relationshipId",
+                    ),
+                    ("layout-copy-icons-data", "copy", "copyId"),
+                    ("layout-copy-icons-data", "icons", "iconId"),
+                    ("layout-copy-icons-data", "data", "dataId"),
+                    (
+                        "components-interactions-responsive",
+                        "components",
+                        "instanceId",
+                    ),
+                    (
+                        "components-interactions-responsive",
+                        "components",
+                        "componentId",
+                    ),
+                    (
+                        "components-interactions-responsive",
+                        "interactions",
+                        "interactionId",
+                    ),
+                    (
+                        "components-interactions-responsive",
+                        "responsiveVariants",
+                        "responsiveVariantId",
+                    ),
                 )
-                if missing_ids:
-                    issues.append(
-                        _issue(
-                            "PAGE_DOCUMENT_REFERENCE_MISSING",
-                            relative_path,
-                            "page document does not mention every machine contract ID",
-                            identity=name_prefix,
-                            missingIds=missing_ids,
-                        )
+                for section_id, field, id_field in section_contracts:
+                    collection = page.get(field) or []
+                    values = {
+                        str(item.get(id_field))
+                        for item in collection
+                        if isinstance(item, dict) and item.get(id_field)
+                    }
+                    if (
+                        not collection
+                        and page.get("status") == "approved"
+                        and field
+                        in {
+                            "layoutRelationships",
+                            "copy",
+                            "icons",
+                            "components",
+                            "data",
+                            "interactions",
+                        }
+                    ):
+                        values = {f"[absence:{field}]"}
+                    require_values(
+                        bodies.get(section_id, ""),
+                        values,
+                        relative_path,
+                        name_prefix,
+                        section_id,
+                        field,
+                        issues,
                     )
+                require_values(
+                    bodies.get("qa-and-gaps", ""),
+                    {
+                        *(
+                            str(item.get("qaId"))
+                            for item in page.get("acceptanceCriteria", [])
+                            if isinstance(item, dict) and item.get("qaId")
+                        ),
+                        *referenced_gap_ids(page),
+                    },
+                    relative_path,
+                    name_prefix,
+                    "qa-and-gaps",
+                    "qaAndGaps",
+                    issues,
+                )
 
 
 def _check_semantic_readiness(
@@ -636,6 +790,16 @@ def _check_semantic_readiness(
         for row in (gap_rows or [])
         if isinstance(row, dict) and row.get("gapId")
     }
+
+    def has_resolved_absence(page: dict, field: str) -> bool:
+        marker = f"[absence:{field}]".lower()
+        return any(
+            str(gap_registry.get(gap_id, {}).get("status", "")).lower()
+            in RESOLVED_GAP_STATUSES
+            and marker
+            in str(gap_registry.get(gap_id, {}).get("resolution", "")).lower()
+            for gap_id in page.get("gapIds", [])
+        )
     component_instances = [
         component
         for page in pages
@@ -671,11 +835,12 @@ def _check_semantic_readiness(
         for field in (
             "layoutRelationships",
             "copy",
+            "icons",
             "components",
             "data",
             "interactions",
         ):
-            if page.get(field):
+            if page.get(field) or has_resolved_absence(page, field):
                 continue
             issues.append(
                 _issue(
@@ -684,26 +849,6 @@ def _check_semantic_readiness(
                     f"approved page has an empty substantive field: {field}",
                     identity=identity_name,
                     field=field,
-                )
-            )
-        if page.get("icons"):
-            continue
-        absence_marker = "[absence:icons]"
-        has_resolved_absence = any(
-            str(gap_registry.get(gap_id, {}).get("status", "")).lower()
-            in RESOLVED_GAP_STATUSES
-            and absence_marker
-            in str(gap_registry.get(gap_id, {}).get("resolution", "")).lower()
-            for gap_id in page.get("gapIds", [])
-        )
-        if not has_resolved_absence:
-            issues.append(
-                _issue(
-                    "APPROVED_PAGE_SUBSTANTIVE_FIELD_EMPTY",
-                    "contracts/page-inventory.json",
-                    "approved page has no icons and no resolved [absence:icons] gap",
-                    identity=identity_name,
-                    field="icons",
                 )
             )
 
@@ -816,6 +961,104 @@ def _load_qa_image(path: Path) -> Image.Image:
         return image.convert("RGBA")
 
 
+def _nonplaceholder_text(value: object) -> bool:
+    return bool(
+        isinstance(value, str)
+        and value.strip()
+        and value.strip().lower() not in PLACEHOLDER_VALUES
+    )
+
+
+def _valid_runner_timestamp(value: object) -> bool:
+    if not _nonplaceholder_text(value):
+        return False
+    try:
+        datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return True
+
+
+def _load_hashed_json_artifact(
+    handoff_root: Path,
+    metadata: object,
+    record_relative: str,
+    qa_id: object,
+    artifact_name: str,
+    issues: list[dict],
+) -> tuple[dict | None, Path | None]:
+    if not isinstance(metadata, dict):
+        issues.append(
+            _issue(
+                "QA_RUNNER_ARTIFACT_REQUIRED",
+                record_relative,
+                f"runner result requires artifact metadata: {artifact_name}",
+                qaId=qa_id,
+                artifact=artifact_name,
+            )
+        )
+        return None, None
+    relative_path = metadata.get("path")
+    if not _safe_relative_path(relative_path):
+        issues.append(
+            _issue(
+                "QA_RUNNER_ARTIFACT_PATH_UNSAFE",
+                record_relative,
+                f"runner artifact path must be package-relative: {artifact_name}",
+                qaId=qa_id,
+                artifact=artifact_name,
+            )
+        )
+        return None, None
+    artifact_path = _resolve_within(handoff_root, relative_path)
+    if artifact_path is None or not artifact_path.is_file():
+        issues.append(
+            _issue(
+                "QA_RUNNER_ARTIFACT_MISSING",
+                str(relative_path),
+                f"runner artifact is missing: {artifact_name}",
+                qaId=qa_id,
+                artifact=artifact_name,
+            )
+        )
+        return None, None
+    if metadata.get("sha256") != _sha256(artifact_path):
+        issues.append(
+            _issue(
+                "QA_RUNNER_ARTIFACT_HASH_MISMATCH",
+                str(relative_path),
+                f"runner artifact SHA-256 is invalid: {artifact_name}",
+                qaId=qa_id,
+                artifact=artifact_name,
+            )
+        )
+    try:
+        document = _strict_json_loads(artifact_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
+        issues.append(
+            _issue(
+                "QA_RUNNER_ARTIFACT_INVALID_JSON",
+                str(relative_path),
+                str(error),
+                qaId=qa_id,
+                artifact=artifact_name,
+            )
+        )
+        return None, artifact_path
+    if not isinstance(document, dict):
+        issues.append(
+            _issue(
+                "QA_RUNNER_ARTIFACT_INVALID_JSON",
+                str(relative_path),
+                "runner artifact JSON root must be an object",
+                qaId=qa_id,
+                artifact=artifact_name,
+            )
+        )
+        return None, artifact_path
+    return document, artifact_path
+
+
 def _check_qa_evidence_records(
     handoff_root: Path,
     documents: dict[str, dict],
@@ -826,6 +1069,8 @@ def _check_qa_evidence_records(
     inventory = documents.get("contracts/page-inventory.json") or {}
     diff_contract = documents.get("contracts/diff-regions.json") or {}
     registry = documents.get("contracts/component-registry.json") or {}
+    manifest = documents.get("contracts/asset-manifest.json") or {}
+    implementation = documents.get("contracts/implementation-map.json") or {}
     pages = {
         _identity(page): page
         for page in inventory.get("pages", [])
@@ -840,6 +1085,16 @@ def _check_qa_evidence_records(
         component.get("componentId")
         for component in registry.get("components", [])
         if isinstance(component, dict) and component.get("componentId")
+    }
+    assets_by_id = {
+        asset.get("assetId"): asset
+        for asset in manifest.get("assets", [])
+        if isinstance(asset, dict) and asset.get("assetId")
+    }
+    implementations = {
+        _identity(mapping): mapping
+        for mapping in implementation.get("mappings", [])
+        if isinstance(mapping, dict)
     }
     requirement_ids_by_identity: dict[tuple[object, object, object], set[object]] = {}
     for requirement in requirement_rows or []:
@@ -897,8 +1152,8 @@ def _check_qa_evidence_records(
                 )
             )
         try:
-            record = json.loads(record_path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            record = _strict_json_loads(record_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
             issues.append(
                 _issue(
                     "QA_EVIDENCE_RECORD_INVALID_JSON",
@@ -948,6 +1203,146 @@ def _check_qa_evidence_records(
                     mismatches=mismatches,
                 )
             )
+
+        identity = _identity(row)
+        page = pages.get(identity) or {}
+        runner_relative = record.get("runnerResultPath")
+        expected_runner_hash = record.get("runnerResultSha256")
+        runner: dict | None = None
+        if not runner_relative or not expected_runner_hash:
+            issues.append(
+                _issue(
+                    "QA_RUNNER_RESULT_REQUIRED",
+                    record_relative,
+                    "passed QA evidence requires runnerResultPath and runnerResultSha256",
+                    qaId=qa_id,
+                )
+            )
+        elif not _safe_relative_path(runner_relative):
+            issues.append(
+                _issue(
+                    "QA_RUNNER_RESULT_PATH_UNSAFE",
+                    record_relative,
+                    "runner result path must be package-relative",
+                    qaId=qa_id,
+                )
+            )
+        else:
+            runner_path = _resolve_within(handoff_root, runner_relative)
+            if runner_path is None or not runner_path.is_file():
+                issues.append(
+                    _issue(
+                        "QA_RUNNER_RESULT_MISSING",
+                        str(runner_relative),
+                        "runner result file is missing",
+                        qaId=qa_id,
+                    )
+                )
+            else:
+                if _sha256(runner_path) != expected_runner_hash:
+                    issues.append(
+                        _issue(
+                            "QA_RUNNER_RESULT_HASH_MISMATCH",
+                            str(runner_relative),
+                            "runner result SHA-256 differs from the evidence record",
+                            qaId=qa_id,
+                        )
+                    )
+                try:
+                    loaded_runner = _strict_json_loads(
+                        runner_path.read_text(encoding="utf-8")
+                    )
+                except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
+                    issues.append(
+                        _issue(
+                            "QA_RUNNER_RESULT_INVALID_JSON",
+                            str(runner_relative),
+                            str(error),
+                            qaId=qa_id,
+                        )
+                    )
+                else:
+                    if isinstance(loaded_runner, dict):
+                        runner = loaded_runner
+                    else:
+                        issues.append(
+                            _issue(
+                                "QA_RUNNER_RESULT_INVALID_JSON",
+                                str(runner_relative),
+                                "runner result JSON root must be an object",
+                                qaId=qa_id,
+                            )
+                        )
+        runner_assertions: list[dict] = []
+        if runner is not None:
+            runner_mismatches = {
+                field: {"expected": row.get(field), "actual": runner.get(field)}
+                for field in (
+                    "qaId",
+                    "pageId",
+                    "stateId",
+                    "variantId",
+                    "evidenceType",
+                )
+                if runner.get(field) != row.get(field)
+            }
+            for field in ("tool", "version", "command"):
+                if not _nonplaceholder_text(runner.get(field)):
+                    runner_mismatches[field] = {
+                        "expected": "nonplaceholder string",
+                        "actual": runner.get(field),
+                    }
+            if runner_mismatches:
+                issues.append(
+                    _issue(
+                        "QA_RUNNER_RESULT_FIELD_MISMATCH",
+                        str(runner_relative),
+                        "runner identity, evidence type, tool, version, or command is invalid",
+                        qaId=qa_id,
+                        mismatches=runner_mismatches,
+                    )
+                )
+            timestamps_valid = _valid_runner_timestamp(
+                runner.get("startedAt")
+            ) and _valid_runner_timestamp(runner.get("finishedAt"))
+            if runner.get("exitCode") != 0 or not timestamps_valid:
+                issues.append(
+                    _issue(
+                        "QA_RUNNER_EXECUTION_INVALID",
+                        str(runner_relative),
+                        "runner exitCode must be 0 and timestamps must be nonplaceholder ISO values",
+                        qaId=qa_id,
+                    )
+                )
+            raw_assertions = runner.get("assertions")
+            if not isinstance(raw_assertions, list) or not raw_assertions:
+                issues.append(
+                    _issue(
+                        "QA_RUNNER_ASSERTIONS_REQUIRED",
+                        str(runner_relative),
+                        "runner assertions must be a nonempty array",
+                        qaId=qa_id,
+                    )
+                )
+            else:
+                runner_assertions = [
+                    assertion
+                    for assertion in raw_assertions
+                    if isinstance(assertion, dict)
+                ]
+                for index, assertion in enumerate(raw_assertions):
+                    if (
+                        not isinstance(assertion, dict)
+                        or assertion.get("status") != "pass"
+                    ):
+                        issues.append(
+                            _issue(
+                                "QA_RUNNER_ASSERTION_NOT_PASSED",
+                                f"{runner_relative}#/assertions/{index}",
+                                "every runner assertion must be an object with status pass",
+                                qaId=qa_id,
+                            )
+                        )
 
         checks = record.get("checks")
         if not isinstance(checks, list) or not checks:
@@ -1026,6 +1421,27 @@ def _check_qa_evidence_records(
                     )
                 )
 
+        if row.get("evidenceType") == "visual":
+            page_assets = [
+                assets_by_id.get(asset_id)
+                for asset_id in page.get("sourceAssetIds", [])
+                if assets_by_id.get(asset_id) is not None
+            ]
+            reference_matches = [
+                asset
+                for asset in page_assets
+                if asset.get("deliveryRelativePath") == row.get("referencePath")
+            ]
+            if len(reference_matches) != 1:
+                issues.append(
+                    _issue(
+                        "QA_VISUAL_REFERENCE_NOT_MANIFEST_ASSET",
+                        "contracts/visual-qa-matrix.csv",
+                        "visual referencePath must equal exactly one page source asset deliveryRelativePath",
+                        qaId=qa_id,
+                    )
+                )
+
         images: dict[str, Image.Image] = {}
         for name, artifact_path in artifact_paths.items():
             try:
@@ -1051,6 +1467,48 @@ def _check_qa_evidence_records(
                     )
                 )
             elif row.get("evidenceType") == "visual":
+                canvas = page.get("canvas") or {}
+                expected_size = (canvas.get("width"), canvas.get("height"))
+                manifest_size = (
+                    (
+                        reference_matches[0].get("width"),
+                        reference_matches[0].get("height"),
+                    )
+                    if len(reference_matches) == 1
+                    else None
+                )
+                diff_page = diff_pages.get(identity) or {}
+                region = next(
+                    (
+                        item
+                        for item in diff_page.get("regions", [])
+                        if isinstance(item, dict)
+                        and item.get("regionId") == row.get("regionId")
+                    ),
+                    None,
+                )
+                bounds = region.get("bounds", {}) if isinstance(region, dict) else {}
+                full_region = (
+                    bounds.get("x") == 0
+                    and bounds.get("y") == 0
+                    and bounds.get("width") == canvas.get("width")
+                    and bounds.get("height") == canvas.get("height")
+                )
+                if (
+                    images["reference"].size != expected_size
+                    or manifest_size != expected_size
+                    or not full_region
+                ):
+                    issues.append(
+                        _issue(
+                            "QA_VISUAL_REFERENCE_DIMENSION_MISMATCH",
+                            row.get("referencePath", ""),
+                            "uncropped reference dimensions and diff region must match the page canvas",
+                            qaId=qa_id,
+                            referenceSize=list(images["reference"].size),
+                            canvasSize=list(expected_size),
+                        )
+                    )
                 expected_overlay = Image.blend(
                     images["reference"], images["current"], 0.5
                 )
@@ -1099,7 +1557,7 @@ def _check_qa_evidence_records(
                         )
                     )
                 elif not any(
-                    isinstance(check.get("actualPixelRatio"), (int, float))
+                    _is_finite_number(check.get("actualPixelRatio"))
                     and math.isclose(
                         float(check["actualPixelRatio"]),
                         actual_pixel_ratio,
@@ -1117,22 +1575,12 @@ def _check_qa_evidence_records(
                             computedPixelRatio=actual_pixel_ratio,
                         )
                     )
-                diff_page = diff_pages.get(_identity(row)) or {}
-                region = next(
-                    (
-                        item
-                        for item in diff_page.get("regions", [])
-                        if isinstance(item, dict)
-                        and item.get("regionId") == row.get("regionId")
-                    ),
-                    None,
-                )
                 tolerance = (
                     region.get("tolerance", {}).get("pixelRatio")
                     if isinstance(region, dict)
                     else None
                 )
-                if not isinstance(tolerance, (int, float)):
+                if not _is_finite_number(tolerance):
                     issues.append(
                         _issue(
                             "QA_PIXEL_TOLERANCE_REQUIRED",
@@ -1155,6 +1603,238 @@ def _check_qa_evidence_records(
 
         identity = _identity(row)
         page = pages.get(identity) or {}
+        if runner is not None and row.get("evidenceType") == "visual":
+            current_metadata = (runner.get("artifacts") or {}).get("current")
+            current_path = row.get("currentPath")
+            current_artifact = _resolve_within(handoff_root, current_path)
+            visual_runner_valid = (
+                runner.get("route") == page.get("route", {}).get("path")
+                and runner.get("captureProfileId") == row.get("captureProfileId")
+                and isinstance(current_metadata, dict)
+                and current_metadata.get("path") == current_path
+                and current_artifact is not None
+                and current_artifact.is_file()
+                and current_metadata.get("sha256") == _sha256(current_artifact)
+            )
+            if not visual_runner_valid:
+                issues.append(
+                    _issue(
+                        "QA_VISUAL_RUNNER_BINDING_MISMATCH",
+                        str(runner_relative),
+                        "visual runner must bind route, capture profile, and current capture path/hash",
+                        qaId=qa_id,
+                    )
+                )
+
+        if runner is not None and row.get("evidenceType") == "structural":
+            runner_artifacts = runner.get("artifacts") or {}
+            dom_snapshot, _dom_path = _load_hashed_json_artifact(
+                handoff_root,
+                runner_artifacts.get("domSnapshot"),
+                str(runner_relative),
+                qa_id,
+                "domSnapshot",
+                issues,
+            )
+            implementation_snapshot, _implementation_path = (
+                _load_hashed_json_artifact(
+                    handoff_root,
+                    runner_artifacts.get("implementationSnapshot"),
+                    str(runner_relative),
+                    qa_id,
+                    "implementationSnapshot",
+                    issues,
+                )
+            )
+            page_region_ids = {
+                region.get("regionId")
+                for region in page.get("regions", [])
+                if isinstance(region, dict)
+            }
+            page_component_ids = {
+                component.get("componentId")
+                for component in page.get("components", [])
+                if isinstance(component, dict)
+            }
+            if dom_snapshot is not None:
+                nodes = dom_snapshot.get("nodes")
+                dom_identity_matches = all(
+                    dom_snapshot.get(field) == row.get(field)
+                    for field in ("pageId", "stateId", "variantId")
+                )
+                dom_nodes_match = (
+                    isinstance(nodes, list)
+                    and bool(nodes)
+                    and all(
+                        isinstance(node, dict)
+                        and node.get("regionId") in page_region_ids
+                        and node.get("componentId") in page_component_ids
+                        and node.get("componentId") in registry_ids
+                        for node in nodes
+                    )
+                )
+                if not dom_identity_matches or not dom_nodes_match:
+                    issues.append(
+                        _issue(
+                            "QA_STRUCTURAL_DOM_BINDING_MISMATCH",
+                            str(runner_relative),
+                            "DOM snapshot identity and node regionId/componentId values must resolve",
+                            qaId=qa_id,
+                        )
+                    )
+            mapping = implementations.get(identity) or {}
+            if implementation_snapshot is not None:
+                entries = implementation_snapshot.get("entries")
+                expected_targets = set(mapping.get("targetFiles") or [])
+                actual_targets = {
+                    entry.get("targetFile")
+                    for entry in entries or []
+                    if isinstance(entry, dict)
+                }
+                entries_valid = (
+                    mapping.get("status") == "approved"
+                    and isinstance(entries, list)
+                    and bool(entries)
+                    and actual_targets == expected_targets
+                    and all(
+                        isinstance(entry, dict)
+                        and _safe_relative_path(entry.get("targetFile"))
+                        and (
+                            target := _resolve_within(
+                                handoff_root, entry.get("targetFile")
+                            )
+                        )
+                        is not None
+                        and target.is_file()
+                        and entry.get("sha256") == _sha256(target)
+                        for entry in entries
+                    )
+                    and all(
+                        implementation_snapshot.get(field) == row.get(field)
+                        for field in ("pageId", "stateId", "variantId")
+                    )
+                )
+                if not entries_valid:
+                    issues.append(
+                        _issue(
+                            "QA_STRUCTURAL_IMPLEMENTATION_SNAPSHOT_MISMATCH",
+                            str(runner_relative),
+                            "implementation snapshot must hash every approved implementation targetFile",
+                            qaId=qa_id,
+                        )
+                    )
+            assertions_by_type = {
+                assertion.get("checkType"): assertion
+                for assertion in runner_assertions
+            }
+            required_assertions = {
+                "requirement-map",
+                "region-map",
+                "component-map",
+            }
+            runner_requirement_ids = requirement_ids_by_identity.get(identity, set())
+            runner_assertions_valid = (
+                required_assertions.issubset(assertions_by_type)
+                and assertions_by_type.get("requirement-map", {}).get(
+                    "requirementId"
+                )
+                in runner_requirement_ids
+                and assertions_by_type.get("region-map", {}).get("regionId")
+                in page_region_ids
+                and assertions_by_type.get("component-map", {}).get("componentId")
+                in page_component_ids
+                and assertions_by_type.get("component-map", {}).get("componentId")
+                in registry_ids
+            )
+            if not runner_assertions_valid:
+                issues.append(
+                    _issue(
+                        "QA_STRUCTURAL_RUNNER_ASSERTIONS_INVALID",
+                        str(runner_relative),
+                        "structural runner requires resolving requirement/region/component assertions",
+                        qaId=qa_id,
+                    )
+                )
+
+        if runner is not None and row.get("evidenceType") == "interaction":
+            runner_artifacts = runner.get("artifacts") or {}
+            interaction_result, _result_path = _load_hashed_json_artifact(
+                handoff_root,
+                runner_artifacts.get("interactionResult"),
+                str(runner_relative),
+                qa_id,
+                "interactionResult",
+                issues,
+            )
+            test_cases = runner.get("testCases")
+            page_interaction_ids = {
+                interaction.get("interactionId")
+                for interaction in page.get("interactions", [])
+                if isinstance(interaction, dict)
+            }
+            cases_valid = isinstance(test_cases, list) and bool(test_cases)
+            covered_ids = set()
+            for index, test_case in enumerate(test_cases or []):
+                if not isinstance(test_case, dict):
+                    cases_valid = False
+                    continue
+                covered_ids.add(test_case.get("interactionId"))
+                assertions = test_case.get("assertions")
+                if test_case.get("status") != "pass":
+                    cases_valid = False
+                if not isinstance(assertions, list) or not assertions:
+                    cases_valid = False
+                    issues.append(
+                        _issue(
+                            "QA_INTERACTION_CASE_ASSERTIONS_REQUIRED",
+                            f"{runner_relative}#/testCases/{index}",
+                            "interaction test case assertions must be nonempty",
+                            qaId=qa_id,
+                        )
+                    )
+                elif any(
+                    not isinstance(assertion, dict)
+                    or assertion.get("status") != "pass"
+                    for assertion in assertions
+                ):
+                    cases_valid = False
+                    issues.append(
+                        _issue(
+                            "QA_INTERACTION_CASE_ASSERTION_NOT_PASSED",
+                            f"{runner_relative}#/testCases/{index}",
+                            "every interaction case assertion must pass",
+                            qaId=qa_id,
+                        )
+                    )
+            if covered_ids != page_interaction_ids:
+                cases_valid = False
+            if not cases_valid:
+                issues.append(
+                    _issue(
+                        "QA_INTERACTION_TEST_CASES_INVALID",
+                        str(runner_relative),
+                        "interaction runner must cover every page interaction with passing cases",
+                        qaId=qa_id,
+                    )
+                )
+            if interaction_result is not None:
+                result_matches = (
+                    all(
+                        interaction_result.get(field) == row.get(field)
+                        for field in ("pageId", "stateId", "variantId")
+                    )
+                    and interaction_result.get("testCases") == test_cases
+                )
+                if not result_matches:
+                    issues.append(
+                        _issue(
+                            "QA_INTERACTION_RESULT_MISMATCH",
+                            str(runner_relative),
+                            "hashed interaction result must match runner identity and test cases",
+                            qaId=qa_id,
+                        )
+                    )
+
         if row.get("evidenceType") == "structural":
             checks_by_type = {
                 check.get("checkType"): check

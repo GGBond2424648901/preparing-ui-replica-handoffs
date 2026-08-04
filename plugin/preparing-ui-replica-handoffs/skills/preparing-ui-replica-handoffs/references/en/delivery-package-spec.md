@@ -107,3 +107,7 @@ Implementation-readiness validation requires the caller to supply the original d
 ruleId: DP-018
 
 An approved page's machine contract and both page documents contain substantive, cross-referenced regions, layout, copy, components, data, and interactions, with component instances resolving to a nonempty registry. A truly absent category requires a resolved page-linked gap explicitly marked `[absence:<field>]`; an empty array does not pass by default.
+
+ruleId: DP-019
+
+Validate semantic ownership by page-document section ID: identity/source belongs in identity, shell/regions in canvas, layout/copy/icons/data in their section, components/interactions/responsiveness in behavior, and QA/gaps in acceptance. Appending every ID to an arbitrary section does not satisfy coverage.

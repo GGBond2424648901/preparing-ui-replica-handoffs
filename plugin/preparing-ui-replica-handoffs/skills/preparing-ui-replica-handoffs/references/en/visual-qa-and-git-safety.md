@@ -87,3 +87,11 @@ Every passing QA row references a SHA-256-bound machine-readable evidence record
 ruleId: QG-016
 
 For visual pass, the validator decodes reference/current, recomputes overlay/diff and pixel-difference ratio, and compares it with region tolerance. Structural pass maps requirements, regions, and components to real contracts. Interaction pass cites replayable cases for page-declared interaction IDs. All three results are derived from evidence, not trusted declarations.
+
+ruleId: QG-017
+
+Reference binds to the page's verified design copy in the asset manifest. Every passing record also binds a hashed runner result containing tool/version/command, start/end times, exit code 0, nonempty all-passing assertions, and artifact hashes; the validator never executes untrusted commands from a handoff.
+
+ruleId: QG-018
+
+A structural runner binds DOM and implementation snapshots and cross-checks region/component/target-file identities with machine contracts. An interaction runner binds each case to a declared interaction ID and nonempty assertions. JSON `NaN`, infinities, and every non-finite tolerance or metric are invalid input.

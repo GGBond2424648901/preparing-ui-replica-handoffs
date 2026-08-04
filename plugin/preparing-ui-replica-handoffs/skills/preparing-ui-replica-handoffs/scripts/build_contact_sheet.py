@@ -21,6 +21,10 @@ PADDING = 16
 MAX_COLUMNS = 4
 
 
+def _reject_nonfinite_json_constant(value: str) -> object:
+    raise ValueError(f"non-finite JSON number is forbidden: {value}")
+
+
 def _package_path(root: Path, relative_path: str) -> Path:
     if (
         not isinstance(relative_path, str)
@@ -56,7 +60,10 @@ def build_contact_sheet(handoff_root: Path, output_path: Path) -> dict:
     if os.path.lexists(output_path):
         raise FileExistsError(f"contact-sheet output already exists: {output_path}")
     manifest_file = handoff_root / MANIFEST_PATH
-    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    manifest = json.loads(
+        manifest_file.read_text(encoding="utf-8"),
+        parse_constant=_reject_nonfinite_json_constant,
+    )
     assets = sorted(manifest.get("assets", []), key=lambda asset: asset["assetId"])
     if not assets:
         raise ValueError("asset manifest contains no assets")
