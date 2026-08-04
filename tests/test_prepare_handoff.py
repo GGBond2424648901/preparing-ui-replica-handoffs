@@ -808,6 +808,14 @@ class PrepareHandoffTests(unittest.TestCase):
             self.assertEqual(page["shell"]["shellId"], "unclassified")
             self.assertEqual(page["components"], [])
             self.assertEqual(page["interactions"], [])
+            identity = f'{page["pageId"]}-{page["stateId"]}-{page["variantId"]}'
+            for locale in ("zh", "en"):
+                page_doc = next(
+                    (first_output / "docs" / locale / "pages").glob(
+                        f"{identity}-*.md"
+                    )
+                ).read_text(encoding="utf-8")
+                self.assertIn("`region-canvas`", page_doc)
 
         with (first_output / "contracts" / "visual-qa-matrix.csv").open(
             encoding="utf-8", newline=""

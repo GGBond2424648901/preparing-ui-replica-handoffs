@@ -797,7 +797,7 @@ def _page_doc_values(number: int, asset: dict, locale: str) -> dict[str, str]:
         canvas_text = (
             f"- 画布：{asset['width']} × {asset['height']} px（直接证据）\n"
             f"- Shell：`unclassified`（unknown，`{gap_id}`）\n"
-            f"- 区域：整幅画布占位区域；语义角色未知（`{gap_id}`）"
+            f"- 区域 ID：`region-canvas`；整幅画布占位区域，语义角色未知（`{gap_id}`）"
         )
         content_text = "未从像素自动推断布局、文案、图标或数据。相关清单保持为空。"
         behavior_text = (
@@ -817,7 +817,7 @@ def _page_doc_values(number: int, asset: dict, locale: str) -> dict[str, str]:
         canvas_text = (
             f"- Canvas: {asset['width']} × {asset['height']} px (direct evidence)\n"
             f"- Shell: `unclassified` (unknown, `{gap_id}`)\n"
-            f"- Region: whole-canvas placeholder; semantic role unknown (`{gap_id}`)"
+            f"- Region ID: `region-canvas`; whole-canvas placeholder with unknown semantic role (`{gap_id}`)"
         )
         content_text = (
             "No layout, copy, icon, or data semantics were inferred from pixels. "
