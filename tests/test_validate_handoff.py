@@ -977,6 +977,69 @@ class ValidateHandoffTests(unittest.TestCase):
             self.codes(self.validate(source_root=self.source)),
         )
 
+    def test_approved_page_section_rejects_repeated_low_entropy_prose(self):
+        page = _read_json(self.handoff / "contracts" / "page-inventory.json")["pages"][0]
+        identity = f"{page['pageId']}-{page['stateId']}-{page['variantId']}"
+        for locale in ("zh", "en"):
+            document = next(
+                (self.handoff / "docs" / locale / "pages").glob(f"{identity}-*.md")
+            )
+
+            def replace_prose(body):
+                lines = body.splitlines()
+                for index, line in enumerate(lines):
+                    if line and not line.startswith(("#", "sectionId:", "contractHash:")) and "`" not in line:
+                        lines[index] = "a" * 50
+                        break
+                return "\n".join(lines) + "\n"
+
+            _rewrite_page_section(document, "layout-copy-icons-data", replace_prose)
+        _refresh_design_lock(self.handoff)
+
+        result = self.validate(source_root=self.source)
+
+        self.assertIn("PAGE_DOCUMENT_SECTION_PROSE_INSUFFICIENT", self.codes(result))
+        prose_issues = [
+            issue
+            for issue in result["issues"]
+            if issue["code"] == "PAGE_DOCUMENT_SECTION_PROSE_INSUFFICIENT"
+            and issue.get("sectionId") == "layout-copy-icons-data"
+        ]
+        self.assertSetEqual({issue.get("locale") for issue in prose_issues}, {"zh-CN", "en-US"})
+
+    def test_approved_page_section_rejects_wrong_locale_prose(self):
+        page = _read_json(self.handoff / "contracts" / "page-inventory.json")["pages"][0]
+        identity = f"{page['pageId']}-{page['stateId']}-{page['variantId']}"
+        replacements = {
+            "zh": "This English sentence has many distinct words but does not satisfy Chinese locale prose requirements.",
+            "en": "这段中文说明包含足够多的不同汉字但是不能满足英文语言环境的文档说明要求。",
+        }
+        for locale, replacement in replacements.items():
+            document = next(
+                (self.handoff / "docs" / locale / "pages").glob(f"{identity}-*.md")
+            )
+
+            def replace_prose(body, replacement=replacement):
+                lines = body.splitlines()
+                for index, line in enumerate(lines):
+                    if line and not line.startswith(("#", "sectionId:", "contractHash:")) and "`" not in line:
+                        lines[index] = replacement
+                        break
+                return "\n".join(lines) + "\n"
+
+            _rewrite_page_section(document, "layout-copy-icons-data", replace_prose)
+        _refresh_design_lock(self.handoff)
+
+        result = self.validate(source_root=self.source)
+
+        prose_issues = [
+            issue
+            for issue in result["issues"]
+            if issue["code"] == "PAGE_DOCUMENT_SECTION_PROSE_INSUFFICIENT"
+            and issue.get("sectionId") == "layout-copy-icons-data"
+        ]
+        self.assertSetEqual({issue.get("locale") for issue in prose_issues}, {"zh-CN", "en-US"})
+
     def test_page_document_requires_localized_copy_and_value_shape(self):
         page = _read_json(self.handoff / "contracts" / "page-inventory.json")["pages"][0]
         identity = f"{page['pageId']}-{page['stateId']}-{page['variantId']}"

@@ -692,7 +692,7 @@ def _check_page_documents(
             )
         )
 
-    def meaningful_prose(body: str, page: dict) -> str:
+    def meaningful_prose(body: str, page: dict, locale: str) -> str:
         machine_ids: set[str] = set()
 
         def collect_ids(value: object, key: str = "") -> None:
@@ -723,7 +723,25 @@ def _check_page_documents(
             prose,
             flags=re.IGNORECASE,
         )
-        return "".join(character for character in prose if character.isalnum())
+        normalized = "".join(character for character in prose if character.isalnum())
+        if len(normalized) < 40:
+            return ""
+        folded = normalized.casefold()
+        if len(set(folded)) / len(folded) < 0.12:
+            return ""
+        if re.search(r"(.)\1{7,}", folded):
+            return ""
+        if locale == "zh":
+            cjk = re.findall(r"[\u3400-\u4dbf\u4e00-\u9fff]", prose)
+            if len(cjk) < 12 or len(set(cjk)) < 8:
+                return ""
+        else:
+            words = [word.casefold() for word in re.findall(r"[A-Za-z]+", prose)]
+            if len(words) < 8 or len(set(words)) < 5:
+                return ""
+            if max(words.count(word) for word in set(words)) / len(words) > 0.4:
+                return ""
+        return normalized
 
     inventory = documents.get("contracts/page-inventory.json") or {}
     registry = documents.get("contracts/component-registry.json") or {}
@@ -788,7 +806,7 @@ def _check_page_documents(
                                     expectedContractHash=expected_hash,
                                 )
                             )
-                        if len(meaningful_prose(body, page)) < 40:
+                        if not meaningful_prose(body, page, locale):
                             issues.append(
                                 _issue(
                                     "PAGE_DOCUMENT_SECTION_PROSE_INSUFFICIENT",
