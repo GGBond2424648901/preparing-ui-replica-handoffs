@@ -29,6 +29,12 @@
     },
     "responsiveVariants": {
       "type": "array",
+      "minItems": 1,
+      "contains": {
+        "type": "object",
+        "properties": { "mode": { "const": "baseline-scroll" } },
+        "required": ["mode"]
+      },
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -39,11 +45,63 @@
           "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
           "status": { "$ref": "#/$defs/lifecycleStatus" },
           "gapIds": { "$ref": "#/$defs/gapIds" }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "anyOf": [
+                {
+                  "properties": { "status": { "enum": ["unknown", "proposed"] } },
+                  "required": ["status"]
+                },
+                {
+                  "properties": { "evidenceLevel": { "const": "unknown" } },
+                  "required": ["evidenceLevel"]
+                }
+              ]
+            },
+            "then": { "properties": { "gapIds": { "minItems": 1 } } }
+          },
+          {
+            "if": {
+              "properties": { "mode": { "const": "responsive" } },
+              "required": ["mode"]
+            },
+            "then": {
+              "anyOf": [
+                {
+                  "properties": { "evidenceLevel": { "enum": ["direct", "approved"] } },
+                  "required": ["evidenceLevel"]
+                },
+                {
+                  "properties": { "status": { "const": "approved" } },
+                  "required": ["status"]
+                }
+              ]
+            }
+          }
+        ]
       }
     },
     "gapIds": { "$ref": "#/$defs/gapIds" }
   },
+  "allOf": [
+    {
+      "if": {
+        "anyOf": [
+          {
+            "properties": { "status": { "enum": ["unknown", "proposed"] } },
+            "required": ["status"]
+          },
+          {
+            "properties": { "evidenceLevel": { "const": "unknown" } },
+            "required": ["evidenceLevel"]
+          }
+        ]
+      },
+      "then": { "properties": { "gapIds": { "minItems": 1 } } }
+    }
+  ],
   "$defs": {
     "evidenceLevel": {
       "enum": ["direct", "derived", "candidate", "approved", "unknown"]
@@ -68,7 +126,24 @@
           "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
           "status": { "$ref": "#/$defs/lifecycleStatus" },
           "gapIds": { "$ref": "#/$defs/gapIds" }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "anyOf": [
+                {
+                  "properties": { "status": { "enum": ["unknown", "proposed"] } },
+                  "required": ["status"]
+                },
+                {
+                  "properties": { "evidenceLevel": { "const": "unknown" } },
+                  "required": ["evidenceLevel"]
+                }
+              ]
+            },
+            "then": { "properties": { "gapIds": { "minItems": 1 } } }
+          }
+        ]
       }
     }
   }

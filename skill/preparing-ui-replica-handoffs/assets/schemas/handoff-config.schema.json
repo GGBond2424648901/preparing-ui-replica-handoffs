@@ -13,8 +13,8 @@
   ],
   "properties": {
     "schemaVersion": { "const": "1.0.0" },
-    "designSourceDir": { "type": "string", "minLength": 1 },
-    "outputDir": { "type": "string", "minLength": 1 },
+    "designSourceDir": { "$ref": "#/$defs/relativePath" },
+    "outputDir": { "$ref": "#/$defs/relativePath" },
     "designVersion": { "type": "string", "minLength": 1 },
     "locales": {
       "type": "array",
@@ -35,7 +35,7 @@
     "relativePath": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^(?![A-Za-z]:[\\\\/])(?!/)(?!\\\\\\\\)(?!file:)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+"
+      "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*:)(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
     },
     "gitScope": {
       "type": "object",

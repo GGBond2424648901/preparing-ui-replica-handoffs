@@ -21,7 +21,12 @@
     "relativePath": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^(?![A-Za-z]:[\\\\/])(?!/)(?!\\\\\\\\)(?!file:)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+"
+      "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*:)(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "gapIds": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^G[0-9]{3,}$" },
+      "uniqueItems": true
     },
     "asset": {
       "type": "object",
@@ -36,7 +41,8 @@
         "height",
         "sha256",
         "duplicateGroupId",
-        "evidenceLevel"
+        "evidenceLevel",
+        "gapIds"
       ],
       "properties": {
         "assetId": { "type": "string", "pattern": "^A[0-9]{3,}$" },
@@ -53,8 +59,18 @@
           "type": ["string", "null"],
           "pattern": "^D[0-9]{3,}$"
         },
-        "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" }
-      }
+        "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
+        "gapIds": { "$ref": "#/$defs/gapIds" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "evidenceLevel": { "const": "unknown" } },
+            "required": ["evidenceLevel"]
+          },
+          "then": { "properties": { "gapIds": { "minItems": 1 } } }
+        }
+      ]
     }
   }
 }

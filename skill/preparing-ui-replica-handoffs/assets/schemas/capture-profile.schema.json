@@ -30,7 +30,8 @@
         "fontEnvironment",
         "colorScheme",
         "reducedMotion",
-        "evidenceLevel"
+        "evidenceLevel",
+        "gapIds"
       ],
       "properties": {
         "captureProfileId": { "type": "string", "minLength": 1 },
@@ -56,8 +57,30 @@
         },
         "colorScheme": { "enum": ["light", "dark", "no-preference"] },
         "reducedMotion": { "type": "boolean" },
-        "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" }
-      }
+        "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
+        "gapIds": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^G[0-9]{3,}$" },
+          "uniqueItems": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "anyOf": [
+              {
+                "properties": { "evidenceLevel": { "const": "unknown" } },
+                "required": ["evidenceLevel"]
+              },
+              {
+                "properties": { "theme": { "const": "unknown" } },
+                "required": ["theme"]
+              }
+            ]
+          },
+          "then": { "properties": { "gapIds": { "minItems": 1 } } }
+        }
+      ]
     }
   }
 }

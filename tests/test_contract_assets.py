@@ -48,8 +48,23 @@ def _git_scope():
     return {
         "repositoryRelativeRoot": ".",
         "allowedNewPaths": ["ui-replica-handoff/"],
-        "allowedModifiedPaths": [],
+        "allowedModifiedPaths": ["existing/file.ts"],
     }
+
+
+def _get_at(document, path):
+    value = document
+    for part in path:
+        value = value[part]
+    return value
+
+
+def _set_at(document, path, value):
+    _get_at(document, path[:-1])[path[-1]] = value
+
+
+def _link_gap(document, path):
+    _set_at(document, path, ["G999"] if path[-1] == "gapIds" else "G999")
 
 
 VALID_DOCUMENTS = {
@@ -77,6 +92,7 @@ VALID_DOCUMENTS = {
                 "sha256": "b" * 64,
                 "duplicateGroupId": None,
                 "evidenceLevel": "direct",
+                "gapIds": [],
             }
         ],
     },
@@ -86,14 +102,23 @@ VALID_DOCUMENTS = {
             {
                 **_identity(),
                 "sourceAssetIds": ["A001"],
-                "route": {"path": "/dashboard", "evidenceLevel": "unknown"},
+                "route": {
+                    "path": "/dashboard",
+                    "evidenceLevel": "unknown",
+                    "gapId": "G001",
+                },
                 "canvas": {"width": 1440, "height": 900, "unit": "px"},
-                "shell": {"shellId": "shell-main", "evidenceLevel": "derived"},
+                "shell": {
+                    "shellId": "shell-main",
+                    "evidenceLevel": "derived",
+                    "gapId": None,
+                },
                 "regions": [
                     {
                         "regionId": "region-main",
                         "role": "main",
                         "evidenceLevel": "direct",
+                        "gapIds": [],
                     }
                 ],
                 "layoutRelationships": [
@@ -103,7 +128,9 @@ VALID_DOCUMENTS = {
                         "display": "grid",
                         "relation": "contains",
                         "targetIds": ["instance-001"],
+                        "overflow": "visible",
                         "evidenceLevel": "derived",
+                        "gapIds": [],
                     }
                 ],
                 "copy": [
@@ -122,6 +149,7 @@ VALID_DOCUMENTS = {
                         "assetId": "A001",
                         "meaning": {"zh-CN": "示例", "en-US": "Example"},
                         "evidenceLevel": "direct",
+                        "gapId": None,
                     }
                 ],
                 "components": [
@@ -130,6 +158,7 @@ VALID_DOCUMENTS = {
                         "componentId": "component-hero",
                         "regionId": "region-main",
                         "evidenceLevel": "candidate",
+                        "gapId": None,
                     }
                 ],
                 "data": [
@@ -138,6 +167,7 @@ VALID_DOCUMENTS = {
                         "classification": "sample",
                         "valueShape": "list",
                         "evidenceLevel": "direct",
+                        "gapId": None,
                     }
                 ],
                 "interactions": [
@@ -178,13 +208,29 @@ VALID_DOCUMENTS = {
         "evidenceLevel": "candidate",
         "status": "candidate",
         "tokens": {
-            "colors": [],
+            "colors": [
+                {
+                    "tokenId": "color-primary",
+                    "value": "#ffffff",
+                    "evidenceLevel": "direct",
+                    "status": "approved",
+                    "gapIds": [],
+                }
+            ],
             "typography": [],
             "spacing": [],
             "radii": [],
             "shadows": [],
         },
-        "responsiveVariants": [],
+        "responsiveVariants": [
+            {
+                "responsiveVariantId": "desktop-base",
+                "mode": "baseline-scroll",
+                "evidenceLevel": "direct",
+                "status": "approved",
+                "gapIds": [],
+            }
+        ],
         "gapIds": [],
     },
     "component-registry.schema.json": {
@@ -197,7 +243,14 @@ VALID_DOCUMENTS = {
                 "evidenceLevel": "candidate",
                 "sourcePageIdentities": [_identity()],
                 "anatomy": ["title", "action"],
-                "variants": [],
+                "variants": [
+                    {
+                        "variantId": "primary",
+                        "status": "approved",
+                        "evidenceLevel": "direct",
+                        "gapIds": [],
+                    }
+                ],
                 "states": [
                     {
                         "stateId": "default",
@@ -206,8 +259,25 @@ VALID_DOCUMENTS = {
                         "gapIds": [],
                     }
                 ],
-                "props": [],
-                "interactions": [],
+                "props": [
+                    {
+                        "propId": "title",
+                        "type": "string",
+                        "required": True,
+                        "evidenceLevel": "direct",
+                        "gapIds": [],
+                    }
+                ],
+                "interactions": [
+                    {
+                        "interactionId": "component-action",
+                        "trigger": "click",
+                        "outcome": {"zh-CN": "提交", "en-US": "Submit"},
+                        "status": "approved",
+                        "evidenceLevel": "direct",
+                        "gapId": None,
+                    }
+                ],
                 "styleTokenRefs": [],
                 "gapIds": [],
             }
@@ -222,11 +292,53 @@ VALID_DOCUMENTS = {
                 "route": "/dashboard",
                 "targetFiles": ["src/pages/dashboard.tsx"],
                 "shellComponentId": "shell-main",
-                "regionMappings": [],
-                "componentMappings": [],
-                "dataBindings": [],
-                "interactionMappings": [],
-                "responsiveMappings": [],
+                "regionMappings": [
+                    {
+                        "regionId": "region-main",
+                        "targetSelector": "main",
+                        "targetFile": "src/pages/dashboard.tsx",
+                        "evidenceLevel": "direct",
+                        "gapIds": [],
+                    }
+                ],
+                "componentMappings": [
+                    {
+                        "instanceId": "instance-001",
+                        "componentId": "component-hero",
+                        "targetSymbol": "Hero",
+                        "targetFile": "src/components/hero.tsx",
+                        "evidenceLevel": "direct",
+                        "gapIds": [],
+                    }
+                ],
+                "dataBindings": [
+                    {
+                        "dataId": "data-001",
+                        "targetSource": "dashboard.items",
+                        "classification": "sample",
+                        "evidenceLevel": "direct",
+                        "gapId": None,
+                    }
+                ],
+                "interactionMappings": [
+                    {
+                        "interactionId": "interaction-001",
+                        "targetHandler": "handleAction",
+                        "status": "approved",
+                        "evidenceLevel": "direct",
+                        "gapId": None,
+                    }
+                ],
+                "responsiveMappings": [
+                    {
+                        "responsiveVariantId": "desktop-base",
+                        "strategy": "baseline-scroll",
+                        "targetFiles": ["src/pages/dashboard.tsx"],
+                        "status": "approved",
+                        "evidenceLevel": "direct",
+                        "gapIds": [],
+                    }
+                ],
                 "evidenceLevel": "candidate",
                 "status": "proposed",
                 "gapIds": ["G001"],
@@ -249,6 +361,7 @@ VALID_DOCUMENTS = {
                 "colorScheme": "light",
                 "reducedMotion": True,
                 "evidenceLevel": "approved",
+                "gapIds": [],
             }
         ],
     },
@@ -283,6 +396,131 @@ VALID_DOCUMENTS = {
         "status": "generated",
     },
 }
+
+
+EVIDENCE_CASES = (
+    ("asset-manifest.schema.json", ("assets", 0, "evidenceLevel"), ("assets", 0, "gapIds")),
+    ("page-inventory.schema.json", ("pages", 0, "route", "evidenceLevel"), ("pages", 0, "route", "gapId")),
+    ("page-inventory.schema.json", ("pages", 0, "shell", "evidenceLevel"), ("pages", 0, "shell", "gapId")),
+    ("page-inventory.schema.json", ("pages", 0, "regions", 0, "evidenceLevel"), ("pages", 0, "regions", 0, "gapIds")),
+    ("page-inventory.schema.json", ("pages", 0, "layoutRelationships", 0, "evidenceLevel"), ("pages", 0, "layoutRelationships", 0, "gapIds")),
+    ("page-inventory.schema.json", ("pages", 0, "copy", 0, "evidenceLevel"), ("pages", 0, "copy", 0, "gapId")),
+    ("page-inventory.schema.json", ("pages", 0, "icons", 0, "evidenceLevel"), ("pages", 0, "icons", 0, "gapId")),
+    ("page-inventory.schema.json", ("pages", 0, "components", 0, "evidenceLevel"), ("pages", 0, "components", 0, "gapId")),
+    ("page-inventory.schema.json", ("pages", 0, "data", 0, "evidenceLevel"), ("pages", 0, "data", 0, "gapId")),
+    ("page-inventory.schema.json", ("pages", 0, "interactions", 0, "evidenceLevel"), ("pages", 0, "interactions", 0, "gapId")),
+    ("page-inventory.schema.json", ("pages", 0, "responsiveVariants", 0, "evidenceLevel"), ("pages", 0, "responsiveVariants", 0, "gapIds")),
+    ("page-inventory.schema.json", ("pages", 0, "evidenceLevel"), ("pages", 0, "gapIds")),
+    ("ui-style-contract.schema.json", ("evidenceLevel",), ("gapIds",)),
+    ("ui-style-contract.schema.json", ("tokens", "colors", 0, "evidenceLevel"), ("tokens", "colors", 0, "gapIds")),
+    ("ui-style-contract.schema.json", ("responsiveVariants", 0, "evidenceLevel"), ("responsiveVariants", 0, "gapIds")),
+    ("component-registry.schema.json", ("components", 0, "evidenceLevel"), ("components", 0, "gapIds")),
+    ("component-registry.schema.json", ("components", 0, "variants", 0, "evidenceLevel"), ("components", 0, "variants", 0, "gapIds")),
+    ("component-registry.schema.json", ("components", 0, "states", 0, "evidenceLevel"), ("components", 0, "states", 0, "gapIds")),
+    ("component-registry.schema.json", ("components", 0, "props", 0, "evidenceLevel"), ("components", 0, "props", 0, "gapIds")),
+    ("component-registry.schema.json", ("components", 0, "interactions", 0, "evidenceLevel"), ("components", 0, "interactions", 0, "gapId")),
+    ("implementation-map.schema.json", ("mappings", 0, "evidenceLevel"), ("mappings", 0, "gapIds")),
+    ("implementation-map.schema.json", ("mappings", 0, "regionMappings", 0, "evidenceLevel"), ("mappings", 0, "regionMappings", 0, "gapIds")),
+    ("implementation-map.schema.json", ("mappings", 0, "componentMappings", 0, "evidenceLevel"), ("mappings", 0, "componentMappings", 0, "gapIds")),
+    ("implementation-map.schema.json", ("mappings", 0, "dataBindings", 0, "evidenceLevel"), ("mappings", 0, "dataBindings", 0, "gapId")),
+    ("implementation-map.schema.json", ("mappings", 0, "interactionMappings", 0, "evidenceLevel"), ("mappings", 0, "interactionMappings", 0, "gapId")),
+    ("implementation-map.schema.json", ("mappings", 0, "responsiveMappings", 0, "evidenceLevel"), ("mappings", 0, "responsiveMappings", 0, "gapIds")),
+    ("capture-profile.schema.json", ("profiles", 0, "evidenceLevel"), ("profiles", 0, "gapIds")),
+)
+
+LIFECYCLE_CASES = (
+    ("page-inventory.schema.json", ("pages", 0, "interactions", 0, "status"), ("pages", 0, "interactions", 0, "gapId")),
+    ("page-inventory.schema.json", ("pages", 0, "responsiveVariants", 0, "status"), ("pages", 0, "responsiveVariants", 0, "gapIds")),
+    ("page-inventory.schema.json", ("pages", 0, "status"), ("pages", 0, "gapIds")),
+    ("ui-style-contract.schema.json", ("status",), ("gapIds",)),
+    ("ui-style-contract.schema.json", ("tokens", "colors", 0, "status"), ("tokens", "colors", 0, "gapIds")),
+    ("ui-style-contract.schema.json", ("responsiveVariants", 0, "status"), ("responsiveVariants", 0, "gapIds")),
+    ("component-registry.schema.json", ("components", 0, "status"), ("components", 0, "gapIds")),
+    ("component-registry.schema.json", ("components", 0, "variants", 0, "status"), ("components", 0, "variants", 0, "gapIds")),
+    ("component-registry.schema.json", ("components", 0, "states", 0, "status"), ("components", 0, "states", 0, "gapIds")),
+    ("component-registry.schema.json", ("components", 0, "interactions", 0, "status"), ("components", 0, "interactions", 0, "gapId")),
+    ("implementation-map.schema.json", ("mappings", 0, "status"), ("mappings", 0, "gapIds")),
+    ("implementation-map.schema.json", ("mappings", 0, "interactionMappings", 0, "status"), ("mappings", 0, "interactionMappings", 0, "gapId")),
+    ("implementation-map.schema.json", ("mappings", 0, "responsiveMappings", 0, "status"), ("mappings", 0, "responsiveMappings", 0, "gapIds")),
+)
+
+QA_CASES = (
+    ("page-inventory.schema.json", ("pages", 0, "acceptanceCriteria", 0, "status")),
+    ("diff-regions.schema.json", ("pages", 0, "regions", 0, "status")),
+)
+
+SEMANTIC_GAP_CASES = (
+    ("page-inventory.schema.json", ("pages", 0, "route", "path"), ("pages", 0, "route", "gapId"), None),
+    ("page-inventory.schema.json", ("pages", 0, "regions", 0, "role"), ("pages", 0, "regions", 0, "gapIds"), "unknown"),
+    ("page-inventory.schema.json", ("pages", 0, "layoutRelationships", 0, "display"), ("pages", 0, "layoutRelationships", 0, "gapIds"), "unknown"),
+    ("page-inventory.schema.json", ("pages", 0, "layoutRelationships", 0, "relation"), ("pages", 0, "layoutRelationships", 0, "gapIds"), "unknown"),
+    ("page-inventory.schema.json", ("pages", 0, "layoutRelationships", 0, "overflow"), ("pages", 0, "layoutRelationships", 0, "gapIds"), "unknown"),
+    ("page-inventory.schema.json", ("pages", 0, "copy", 0, "classification"), ("pages", 0, "copy", 0, "gapId"), "unknown"),
+    ("page-inventory.schema.json", ("pages", 0, "copy", 0, "classification"), ("pages", 0, "copy", 0, "gapId"), "inferred"),
+    ("page-inventory.schema.json", ("pages", 0, "icons", 0, "assetId"), ("pages", 0, "icons", 0, "gapId"), None),
+    ("page-inventory.schema.json", ("pages", 0, "data", 0, "classification"), ("pages", 0, "data", 0, "gapId"), "unknown"),
+    ("implementation-map.schema.json", ("mappings", 0, "dataBindings", 0, "classification"), ("mappings", 0, "dataBindings", 0, "gapId"), "unknown"),
+    ("capture-profile.schema.json", ("profiles", 0, "theme"), ("profiles", 0, "gapIds"), "unknown"),
+)
+
+PATH_CASES = (
+    ("handoff-config.schema.json", ("designSourceDir",)),
+    ("handoff-config.schema.json", ("outputDir",)),
+    ("handoff-config.schema.json", ("gitScope", "repositoryRelativeRoot")),
+    ("handoff-config.schema.json", ("gitScope", "allowedNewPaths", 0)),
+    ("handoff-config.schema.json", ("gitScope", "allowedModifiedPaths", 0)),
+    ("asset-manifest.schema.json", ("assets", 0, "sourceRelativePath")),
+    ("asset-manifest.schema.json", ("assets", 0, "deliveryRelativePath")),
+    ("implementation-map.schema.json", ("gitScope", "repositoryRelativeRoot")),
+    ("implementation-map.schema.json", ("gitScope", "allowedNewPaths", 0)),
+    ("implementation-map.schema.json", ("gitScope", "allowedModifiedPaths", 0)),
+    ("implementation-map.schema.json", ("mappings", 0, "targetFiles", 0)),
+    ("implementation-map.schema.json", ("mappings", 0, "regionMappings", 0, "targetFile")),
+    ("implementation-map.schema.json", ("mappings", 0, "componentMappings", 0, "targetFile")),
+    ("implementation-map.schema.json", ("mappings", 0, "responsiveMappings", 0, "targetFiles", 0)),
+    ("design-lock.schema.json", ("files", 0, "relativePath")),
+)
+
+RESPONSIVE_CASES = (
+    (
+        "page-inventory.schema.json",
+        ("pages", 0, "responsiveVariants"),
+        "mode",
+        {
+            "responsiveVariantId": "tablet-approved",
+            "mode": "responsive",
+            "minWidth": 768,
+            "evidenceLevel": "derived",
+            "status": "approved",
+            "gapIds": [],
+        },
+    ),
+    (
+        "ui-style-contract.schema.json",
+        ("responsiveVariants",),
+        "mode",
+        {
+            "responsiveVariantId": "tablet-approved",
+            "mode": "responsive",
+            "evidenceLevel": "derived",
+            "status": "approved",
+            "gapIds": [],
+        },
+    ),
+    (
+        "implementation-map.schema.json",
+        ("mappings", 0, "responsiveMappings"),
+        "strategy",
+        {
+            "responsiveVariantId": "tablet-approved",
+            "strategy": "responsive",
+            "targetFiles": ["src/pages/dashboard.tsx"],
+            "status": "approved",
+            "evidenceLevel": "derived",
+            "gapIds": [],
+        },
+    ),
+)
 
 
 class ContractAssetTests(unittest.TestCase):
@@ -356,35 +594,161 @@ class ContractAssetTests(unittest.TestCase):
                     invalid[collection_key][0].pop(key)
                     self.assertInvalid(schema_name, invalid)
 
-    def test_evidence_and_status_enums_accept_only_the_stable_values(self):
-        asset = VALID_DOCUMENTS["asset-manifest.schema.json"]
-        for evidence_level in EVIDENCE_LEVELS:
-            valid = copy.deepcopy(asset)
-            valid["assets"][0]["evidenceLevel"] = evidence_level
-            self.assertValid("asset-manifest.schema.json", valid)
-        invalid = copy.deepcopy(asset)
-        invalid["assets"][0]["evidenceLevel"] = "assumed"
-        self.assertInvalid("asset-manifest.schema.json", invalid)
+    def test_evidence_lifecycle_and_qa_enums_are_consistent_at_every_boundary(self):
+        domain_cases = (
+            (EVIDENCE_CASES, EVIDENCE_LEVELS, {"unknown"}),
+            (LIFECYCLE_CASES, LIFECYCLE_STATUSES, {"unknown", "proposed"}),
+        )
+        for cases, allowed_values, gap_linked_values in domain_cases:
+            for schema_name, value_path, gap_path in cases:
+                for allowed in allowed_values:
+                    with self.subTest(
+                        schema=schema_name, path=value_path, allowed=allowed
+                    ):
+                        valid = copy.deepcopy(VALID_DOCUMENTS[schema_name])
+                        _set_at(valid, value_path, allowed)
+                        if allowed in gap_linked_values:
+                            _link_gap(valid, gap_path)
+                        self.assertValid(schema_name, valid)
 
-        page = VALID_DOCUMENTS["page-inventory.schema.json"]
-        for status in LIFECYCLE_STATUSES:
-            valid = copy.deepcopy(page)
-            valid["pages"][0]["status"] = status
-            valid["pages"][0]["gapIds"] = (
-                ["G001"] if status in {"unknown", "proposed"} else []
-            )
-            self.assertValid("page-inventory.schema.json", valid)
-        invalid = copy.deepcopy(page)
-        invalid["pages"][0]["status"] = "done"
-        self.assertInvalid("page-inventory.schema.json", invalid)
+                with self.subTest(
+                    schema=schema_name, path=value_path, rejected="outside-domain"
+                ):
+                    invalid = copy.deepcopy(VALID_DOCUMENTS[schema_name])
+                    _set_at(invalid, value_path, "outside-domain")
+                    self.assertInvalid(schema_name, invalid)
 
-        for status in QA_STATUSES:
-            valid = copy.deepcopy(page)
-            valid["pages"][0]["acceptanceCriteria"][0]["status"] = status
-            self.assertValid("page-inventory.schema.json", valid)
-        invalid = copy.deepcopy(page)
-        invalid["pages"][0]["acceptanceCriteria"][0]["status"] = "skipped"
-        self.assertInvalid("page-inventory.schema.json", invalid)
+        for schema_name, value_path in QA_CASES:
+            for allowed in QA_STATUSES:
+                with self.subTest(
+                    schema=schema_name, path=value_path, allowed=allowed
+                ):
+                    valid = copy.deepcopy(VALID_DOCUMENTS[schema_name])
+                    _set_at(valid, value_path, allowed)
+                    self.assertValid(schema_name, valid)
+            invalid = copy.deepcopy(VALID_DOCUMENTS[schema_name])
+            _set_at(invalid, value_path, "outside-domain")
+            self.assertInvalid(schema_name, invalid)
+
+    def test_unknown_evidence_status_and_semantics_require_a_gap_link(self):
+        unknown_cases = [
+            (schema_name, value_path, gap_path, "unknown")
+            for schema_name, value_path, gap_path in EVIDENCE_CASES
+        ]
+        unknown_cases.extend(
+            (schema_name, value_path, gap_path, value)
+            for schema_name, value_path, gap_path in LIFECYCLE_CASES
+            for value in ("unknown", "proposed")
+        )
+        unknown_cases.extend(
+            (schema_name, value_path, gap_path, unresolved_value)
+            for schema_name, value_path, gap_path, unresolved_value in SEMANTIC_GAP_CASES
+        )
+
+        for schema_name, value_path, gap_path, unresolved_value in unknown_cases:
+            with self.subTest(
+                schema=schema_name, path=value_path, value=unresolved_value
+            ):
+                valid = copy.deepcopy(VALID_DOCUMENTS[schema_name])
+                _set_at(valid, value_path, unresolved_value)
+                _link_gap(valid, gap_path)
+                self.assertValid(schema_name, valid)
+
+                invalid = copy.deepcopy(valid)
+                _set_at(invalid, gap_path, [] if gap_path[-1] == "gapIds" else None)
+                self.assertInvalid(schema_name, invalid)
+
+    def test_all_stored_package_paths_reject_absolute_traversal_and_uri_values(self):
+        forbidden_paths = (
+            "C:/workspace/file.png",
+            "C:\\workspace\\file.png",
+            "\\\\server\\share\\file.png",
+            "\\rooted\\file.png",
+            "/rooted/file.png",
+            "../secret.png",
+            "folder/../../secret.png",
+            "file:///tmp/file.png",
+            "http://example.test/file.png",
+            "https://example.test/file.png",
+            "custom:payload",
+        )
+        for schema_name, value_path in PATH_CASES:
+            for forbidden in forbidden_paths:
+                with self.subTest(
+                    schema=schema_name, path=value_path, forbidden=forbidden
+                ):
+                    invalid = copy.deepcopy(VALID_DOCUMENTS[schema_name])
+                    _set_at(invalid, value_path, forbidden)
+                    self.assertInvalid(schema_name, invalid)
+
+        for schema_name in (
+            "handoff-config.schema.json",
+            "asset-manifest.schema.json",
+            "implementation-map.schema.json",
+            "design-lock.schema.json",
+        ):
+            relative_path_schema = self.schemas[schema_name]["$defs"]["relativePath"]
+            validator = Draft202012Validator(relative_path_schema)
+            for forbidden in forbidden_paths:
+                with self.subTest(
+                    schema=schema_name, definition="relativePath", forbidden=forbidden
+                ):
+                    self.assertTrue(list(validator.iter_errors(forbidden)))
+
+    def test_responsive_contracts_require_baseline_scroll_and_evidence_or_approval(self):
+        for schema_name, variants_path, mode_key, responsive_entry in RESPONSIVE_CASES:
+            with self.subTest(schema=schema_name, rule="baseline-required"):
+                missing_baseline = copy.deepcopy(VALID_DOCUMENTS[schema_name])
+                _set_at(missing_baseline, variants_path, [])
+                self.assertInvalid(schema_name, missing_baseline)
+
+            approved = copy.deepcopy(VALID_DOCUMENTS[schema_name])
+            _get_at(approved, variants_path).append(copy.deepcopy(responsive_entry))
+            self.assertValid(schema_name, approved)
+
+            directly_evidenced = copy.deepcopy(approved)
+            responsive = _get_at(directly_evidenced, variants_path)[-1]
+            responsive["evidenceLevel"] = "direct"
+            responsive["status"] = "candidate"
+            self.assertValid(schema_name, directly_evidenced)
+
+            approved_evidence = copy.deepcopy(approved)
+            responsive = _get_at(approved_evidence, variants_path)[-1]
+            responsive["evidenceLevel"] = "approved"
+            responsive["status"] = "candidate"
+            self.assertValid(schema_name, approved_evidence)
+
+            unsupported = copy.deepcopy(approved)
+            responsive = _get_at(unsupported, variants_path)[-1]
+            responsive["evidenceLevel"] = "derived"
+            responsive["status"] = "candidate"
+            self.assertInvalid(schema_name, unsupported)
+
+            unknown_with_gap = copy.deepcopy(approved)
+            responsive = _get_at(unknown_with_gap, variants_path)[-1]
+            responsive["evidenceLevel"] = "unknown"
+            responsive["gapIds"] = ["G999"]
+            self.assertValid(schema_name, unknown_with_gap)
+
+            unknown_without_gap = copy.deepcopy(unknown_with_gap)
+            _get_at(unknown_without_gap, variants_path)[-1]["gapIds"] = []
+            self.assertInvalid(schema_name, unknown_without_gap)
+
+            self.assertIn(mode_key, _get_at(approved, variants_path)[-1])
+
+    def test_component_variants_and_states_use_distinct_identity_keys(self):
+        valid = VALID_DOCUMENTS["component-registry.schema.json"]
+        self.assertValid("component-registry.schema.json", valid)
+
+        variant_with_state_id = copy.deepcopy(valid)
+        variant = variant_with_state_id["components"][0]["variants"][0]
+        variant["stateId"] = variant.pop("variantId")
+        self.assertInvalid("component-registry.schema.json", variant_with_state_id)
+
+        state_with_variant_id = copy.deepcopy(valid)
+        state = state_with_variant_id["components"][0]["states"][0]
+        state["variantId"] = state.pop("stateId")
+        self.assertInvalid("component-registry.schema.json", state_with_variant_id)
 
     def test_csv_templates_expose_stable_qa_git_and_gap_fields(self):
         expected_headers = {
