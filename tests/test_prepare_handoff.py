@@ -59,6 +59,23 @@ def _file_bytes(root):
     }
 
 
+def _write_json(path, document):
+    path.write_text(
+        json.dumps(document, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _hash_records(records):
+    digest = hashlib.sha256()
+    for relative_path, file_hash in records:
+        digest.update(relative_path.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(file_hash.encode("ascii"))
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
 class PrepareHandoffTests(unittest.TestCase):
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
@@ -140,6 +157,33 @@ class PrepareHandoffTests(unittest.TestCase):
         self.assertEqual(
             PREPARE_HANDOFF.sha256_file(jpeg),
             hashlib.sha256(jpeg.read_bytes()).hexdigest(),
+        )
+
+    def test_collect_images_builds_metadata_from_one_immutable_byte_snapshot(self):
+        image = self.source / "screen.png"
+        _write_image(image, (2, 3), (10, 20, 30), "PNG")
+        original_bytes = image.read_bytes()
+        original_read_bytes = Path.read_bytes
+        mutated = False
+
+        def read_then_mutate(path):
+            nonlocal mutated
+            data = original_read_bytes(path)
+            if Path(path) == image and not mutated:
+                mutated = True
+                _write_image(image, (7, 5), (90, 80, 70), "PNG")
+            return data
+
+        with mock.patch.object(Path, "read_bytes", autospec=True, side_effect=read_then_mutate):
+            records = PREPARE_HANDOFF.collect_images(self.source)
+
+        self.assertTrue(mutated)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["width"], 2)
+        self.assertEqual(records[0]["height"], 3)
+        self.assertEqual(records[0]["byteSize"], len(original_bytes))
+        self.assertEqual(
+            records[0]["sha256"], hashlib.sha256(original_bytes).hexdigest()
         )
 
     def test_prepare_generates_deterministic_schema_valid_bilingual_skeleton(self):
@@ -303,6 +347,32 @@ class PrepareHandoffTests(unittest.TestCase):
         self.assertFalse(output.exists())
         self.assertEqual(_file_bytes(self.source), source_before)
 
+    def test_results_are_identical_and_relative_only_across_machine_roots(self):
+        self.make_three_image_source()
+        other_root = self.root / "other-machine"
+        other_source = other_root / "design-source"
+        shutil.copytree(self.source, other_source)
+
+        first = PREPARE_HANDOFF.prepare_handoff(
+            self.source,
+            self.root / "first-machine-output",
+            design_version="v1",
+            dry_run=True,
+        )
+        second = PREPARE_HANDOFF.prepare_handoff(
+            other_source,
+            other_root / "second-machine-output",
+            design_version="v1",
+            dry_run=True,
+        )
+
+        self.assertEqual(first, second)
+        self.assertNotIn("outputRoot", first)
+        self.assertEqual(first.get("packageRoot"), ".")
+        serialized = json.dumps(first, ensure_ascii=False)
+        self.assertNotIn(str(self.root), serialized)
+        self.assertNotRegex(serialized, r"(?i)[A-Z]:[\\/]")
+
     def test_force_replaces_managed_output_but_never_unmanaged_content(self):
         self.make_three_image_source()
         managed = self.root / "managed"
@@ -322,6 +392,20 @@ class PrepareHandoffTests(unittest.TestCase):
             )
         self.assertEqual(owner_note.read_text(encoding="utf-8"), "do not replace")
 
+        empty_unmanaged = self.root / "empty-unmanaged"
+        empty_unmanaged.mkdir()
+        for force in (False, True):
+            with self.subTest(empty_unmanaged=True, force=force):
+                with self.assertRaisesRegex(FileExistsError, "unmanaged|collision"):
+                    PREPARE_HANDOFF.prepare_handoff(
+                        self.source,
+                        empty_unmanaged,
+                        design_version="v1",
+                        force=force,
+                    )
+                self.assertTrue(empty_unmanaged.is_dir())
+                self.assertEqual(list(empty_unmanaged.iterdir()), [])
+
         unmanaged = self.root / "unmanaged"
         unmanaged.mkdir()
         sentinel = unmanaged / "keep.txt"
@@ -336,6 +420,125 @@ class PrepareHandoffTests(unittest.TestCase):
                         force=force,
                     )
                 self.assertEqual(sentinel.read_text(encoding="utf-8"), "owner data")
+
+    def test_new_target_content_inserted_after_authorization_is_preserved(self):
+        self.make_three_image_source()
+        output = self.root / "concurrent-new-output"
+        real_write_lock = PREPARE_HANDOFF._write_design_lock
+
+        def write_lock_then_insert_owner_data(*args, **kwargs):
+            result = real_write_lock(*args, **kwargs)
+            output.mkdir()
+            (output / "owner.txt").write_text("concurrent owner", encoding="utf-8")
+            return result
+
+        with mock.patch.object(
+            PREPARE_HANDOFF,
+            "_write_design_lock",
+            side_effect=write_lock_then_insert_owner_data,
+        ):
+            with self.assertRaisesRegex(FileExistsError, "drift|race|collision|unmanaged"):
+                PREPARE_HANDOFF.prepare_handoff(
+                    self.source, output, design_version="v1"
+                )
+
+        self.assertEqual(
+            (output / "owner.txt").read_text(encoding="utf-8"), "concurrent owner"
+        )
+
+    def test_managed_target_changed_after_authorization_is_preserved(self):
+        self.make_three_image_source()
+        output = self.root / "concurrent-managed-output"
+        PREPARE_HANDOFF.prepare_handoff(self.source, output, design_version="v1")
+        real_write_lock = PREPARE_HANDOFF._write_design_lock
+
+        def write_lock_then_change_target(*args, **kwargs):
+            result = real_write_lock(*args, **kwargs)
+            (output / "README.md").write_text("concurrent edit", encoding="utf-8")
+            return result
+
+        with mock.patch.object(
+            PREPARE_HANDOFF,
+            "_write_design_lock",
+            side_effect=write_lock_then_change_target,
+        ):
+            with self.assertRaisesRegex(FileExistsError, "drift|race|collision|unmanaged"):
+                PREPARE_HANDOFF.prepare_handoff(
+                    self.source, output, design_version="v1", force=True
+                )
+
+        self.assertEqual(
+            (output / "README.md").read_text(encoding="utf-8"), "concurrent edit"
+        )
+
+    def test_corrupt_lock_metadata_never_authorizes_force_replacement(self):
+        mutators = {
+            "design version": lambda lock: lock.__setitem__("designVersion", "v2"),
+            "source set hash": lambda lock: lock.__setitem__(
+                "sourceSetHash", "0" * 64
+            ),
+            "contracts hash": lambda lock: lock.__setitem__(
+                "contractsHash", "0" * 64
+            ),
+            "generated timestamp": lambda lock: lock.__setitem__(
+                "generatedAt", "not-a-date-time"
+            ),
+            "unexpected field": lambda lock: lock.__setitem__("unexpected", True),
+            "duplicate inventory": lambda lock: lock["files"].append(
+                dict(lock["files"][0])
+            ),
+        }
+        for case, mutate in mutators.items():
+            with self.subTest(case=case):
+                case_root = self.root / case.replace(" ", "-")
+                source = case_root / "source"
+                output = case_root / "output"
+                _write_image(source / "screen.png", (2, 2), (1, 2, 3), "PNG")
+                PREPARE_HANDOFF.prepare_handoff(source, output, design_version="v1")
+                lock_path = output / "contracts" / "design-lock.json"
+                lock = json.loads(lock_path.read_text(encoding="utf-8"))
+                mutate(lock)
+                _write_json(lock_path, lock)
+                before = _file_bytes(output)
+
+                with self.assertRaisesRegex(FileExistsError, "unmanaged|collision"):
+                    PREPARE_HANDOFF.prepare_handoff(
+                        source, output, design_version="v1", force=True
+                    )
+
+                self.assertEqual(_file_bytes(output), before)
+
+    def test_cross_contract_manifest_drift_never_authorizes_replacement(self):
+        image = self.source / "screen.png"
+        _write_image(image, (2, 2), (3, 4, 5), "PNG")
+        output = self.root / "cross-contract-output"
+        PREPARE_HANDOFF.prepare_handoff(self.source, output, design_version="v1")
+        manifest_path = output / "contracts" / "asset-manifest.json"
+        lock_path = output / "contracts" / "design-lock.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        lock = json.loads(lock_path.read_text(encoding="utf-8"))
+        manifest["designVersion"] = "mismatched-version"
+        _write_json(manifest_path, manifest)
+        manifest_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+        for entry in lock["files"]:
+            if entry["relativePath"] == "contracts/asset-manifest.json":
+                entry["sha256"] = manifest_hash
+        lock["contractsHash"] = _hash_records(
+            [
+                (entry["relativePath"], entry["sha256"])
+                for entry in lock["files"]
+                if entry["relativePath"].startswith("contracts/")
+            ]
+        )
+        _write_json(lock_path, lock)
+        before = _file_bytes(output)
+
+        with self.assertRaisesRegex(FileExistsError, "unmanaged|collision"):
+            PREPARE_HANDOFF.prepare_handoff(
+                self.source, output, design_version="v1", force=True
+            )
+
+        self.assertEqual(_file_bytes(output), before)
 
     def test_missing_empty_corrupt_and_nested_sources_fail_closed(self):
         with self.subTest(case="missing source"):
@@ -370,19 +573,19 @@ class PrepareHandoffTests(unittest.TestCase):
         image = self.source / "screen.png"
         _write_image(image, (2, 2), (15, 25, 35), "PNG")
         output = self.root / "drift-output"
-        real_copyfile = shutil.copyfile
+        real_write_lock = PREPARE_HANDOFF._write_design_lock
         mutated = False
 
-        def copy_then_mutate(source, destination, *args, **kwargs):
+        def write_lock_then_mutate(*args, **kwargs):
             nonlocal mutated
-            result = real_copyfile(source, destination, *args, **kwargs)
+            result = real_write_lock(*args, **kwargs)
             if not mutated:
                 mutated = True
-                Path(source).write_bytes(Path(source).read_bytes() + b"drift")
+                _write_image(image, (3, 2), (35, 25, 15), "PNG")
             return result
 
         with mock.patch.object(
-            PREPARE_HANDOFF.shutil, "copyfile", side_effect=copy_then_mutate
+            PREPARE_HANDOFF, "_write_design_lock", side_effect=write_lock_then_mutate
         ):
             with self.assertRaisesRegex(RuntimeError, "source.*changed|drift"):
                 PREPARE_HANDOFF.prepare_handoff(
@@ -391,6 +594,52 @@ class PrepareHandoffTests(unittest.TestCase):
 
         self.assertTrue(mutated)
         self.assertFalse((output / "contracts" / "design-lock.json").exists())
+
+    def test_final_source_rescan_rejects_add_remove_rename_and_byte_drift(self):
+        def add_image(source):
+            _write_image(source / "added.png", (1, 1), (4, 5, 6), "PNG")
+
+        def remove_image(source):
+            (source / "screen.png").unlink()
+
+        def rename_image(source):
+            (source / "screen.png").rename(source / "renamed.png")
+
+        def replace_image(source):
+            _write_image(source / "screen.png", (5, 4), (7, 8, 9), "PNG")
+
+        mutations = {
+            "addition": add_image,
+            "removal": remove_image,
+            "rename": rename_image,
+            "byte and metadata drift": replace_image,
+        }
+        for case, mutate in mutations.items():
+            with self.subTest(case=case):
+                case_root = self.root / case.replace(" ", "-")
+                source = case_root / "source"
+                output = case_root / "output"
+                _write_image(source / "screen.png", (2, 3), (1, 2, 3), "PNG")
+                real_copy = PREPARE_HANDOFF._copy_and_verify_sources
+
+                def copy_then_mutate(*args, **kwargs):
+                    result = real_copy(*args, **kwargs)
+                    mutate(source)
+                    return result
+
+                with mock.patch.object(
+                    PREPARE_HANDOFF,
+                    "_copy_and_verify_sources",
+                    side_effect=copy_then_mutate,
+                ):
+                    with self.assertRaisesRegex(
+                        RuntimeError, "source.*(changed|drift)|source set"
+                    ):
+                        PREPARE_HANDOFF.prepare_handoff(
+                            source, output, design_version="v1"
+                        )
+
+                self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":

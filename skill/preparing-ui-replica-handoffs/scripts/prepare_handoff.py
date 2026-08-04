@@ -10,6 +10,7 @@ import re
 import shutil
 import tempfile
 
+from jsonschema import Draft202012Validator, FormatChecker
 from PIL import Image, UnidentifiedImageError
 
 
@@ -25,6 +26,17 @@ CANONICAL_LOCALES = ("zh-CN", "en-US")
 DETERMINISTIC_GENERATED_AT = "1970-01-01T00:00:00Z"
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_ROOT = SKILL_ROOT / "assets" / "templates"
+SCHEMA_ROOT = SKILL_ROOT / "assets" / "schemas"
+SCHEMA_CONTRACTS = {
+    "contracts/asset-manifest.json": "asset-manifest.schema.json",
+    "contracts/page-inventory.json": "page-inventory.schema.json",
+    "contracts/ui-style-contract.json": "ui-style-contract.schema.json",
+    "contracts/component-registry.json": "component-registry.schema.json",
+    "contracts/implementation-map.json": "implementation-map.schema.json",
+    "contracts/capture-profile.json": "capture-profile.schema.json",
+    "contracts/diff-regions.json": "diff-regions.schema.json",
+    "contracts/design-lock.json": "design-lock.schema.json",
+}
 
 
 def sha256_file(path: Path) -> str:
@@ -44,6 +56,13 @@ def _is_within(path: Path, parent: Path) -> bool:
 
 
 def collect_images(source_root: Path) -> list[dict]:
+    return [
+        {key: value for key, value in image.items() if key != "_content"}
+        for image in _scan_image_snapshots(source_root)
+    ]
+
+
+def _scan_image_snapshots(source_root: Path) -> list[dict]:
     source_root = Path(source_root)
     if not source_root.exists():
         raise FileNotFoundError(f"source directory does not exist: {source_root}")
@@ -70,8 +89,9 @@ def collect_images(source_root: Path) -> list[dict]:
         resolved_path = path.resolve()
         if not _is_within(resolved_path, resolved_root):
             raise ValueError(f"source image escapes the source directory: {path}")
+        content = path.read_bytes()
         try:
-            with Image.open(path) as image:
+            with Image.open(io.BytesIO(content)) as image:
                 image_format = (image.format or "").upper()
                 image.load()
                 width, height = image.size
@@ -85,10 +105,11 @@ def collect_images(source_root: Path) -> list[dict]:
                 "sourceRelativePath": path.relative_to(source_root).as_posix(),
                 "mediaType": media_type,
                 "canonicalSuffix": canonical_suffix,
-                "byteSize": path.stat().st_size,
+                "byteSize": len(content),
                 "width": width,
                 "height": height,
-                "sha256": sha256_file(path),
+                "sha256": hashlib.sha256(content).hexdigest(),
+                "_content": content,
             }
         )
     return images
@@ -129,44 +150,87 @@ def _validate_inputs(
     return source_root, output_root
 
 
-def _is_managed_output(output_root: Path) -> bool:
-    lock_path = output_root / "contracts" / "design-lock.json"
-    manifest_path = output_root / "contracts" / "asset-manifest.json"
-    if not lock_path.is_file() or not manifest_path.is_file():
-        return False
+def _read_schema(schema_name: str) -> dict:
+    return json.loads((SCHEMA_ROOT / schema_name).read_text(encoding="utf-8"))
+
+
+def _contract_is_schema_valid(schema_name: str, document: dict) -> bool:
+    return not list(
+        Draft202012Validator(
+            _read_schema(schema_name), format_checker=FormatChecker()
+        ).iter_errors(document)
+    )
+
+
+def _managed_output_snapshot(output_root: Path) -> dict | None:
+    documents = {}
     try:
-        lock = json.loads(lock_path.read_text(encoding="utf-8"))
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        for relative_path, schema_name in SCHEMA_CONTRACTS.items():
+            path = output_root / relative_path
+            if path.is_symlink() or not path.is_file():
+                return None
+            document = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(document, dict) or not _contract_is_schema_valid(
+                schema_name, document
+            ):
+                return None
+            documents[relative_path] = document
     except (OSError, UnicodeError, json.JSONDecodeError):
-        return False
-    if not (
-        lock.get("schemaVersion") == SCHEMA_VERSION
-        and lock.get("status") == "generated"
-        and manifest.get("schemaVersion") == SCHEMA_VERSION
-        and isinstance(lock.get("files"), list)
+        return None
+
+    lock = documents["contracts/design-lock.json"]
+    manifest = documents["contracts/asset-manifest.json"]
+    page_inventory = documents["contracts/page-inventory.json"]
+    if lock["status"] != "generated":
+        return None
+    if (
+        lock["designVersion"] != manifest["designVersion"]
+        or lock["sourceSetHash"] != manifest["sourceSetHash"]
     ):
-        return False
+        return None
+
+    manifest_source_records = [
+        (asset["sourceRelativePath"], asset["sha256"])
+        for asset in manifest["assets"]
+    ]
+    if _record_set_hash(manifest_source_records) != manifest["sourceSetHash"]:
+        return None
+    asset_ids = [asset["assetId"] for asset in manifest["assets"]]
+    source_paths = [asset["sourceRelativePath"] for asset in manifest["assets"]]
+    delivery_paths = [asset["deliveryRelativePath"] for asset in manifest["assets"]]
+    if (
+        len(asset_ids) != len(set(asset_ids))
+        or len(source_paths) != len(set(source_paths))
+        or len(delivery_paths) != len(set(delivery_paths))
+    ):
+        return None
+
+    referenced_asset_ids = {
+        asset_id
+        for page in page_inventory["pages"]
+        for asset_id in page["sourceAssetIds"]
+    }
+    if referenced_asset_ids != set(asset_ids):
+        return None
 
     expected_files = {"contracts/design-lock.json"}
     expected_directories = set()
+    locked_hashes = {}
     for entry in lock["files"]:
-        if not isinstance(entry, dict):
-            return False
-        relative_path = entry.get("relativePath")
-        expected_hash = entry.get("sha256")
-        if not isinstance(relative_path, str) or not re.fullmatch(
-            r"[a-f0-9]{64}", expected_hash or ""
-        ):
-            return False
+        relative_path = entry["relativePath"]
+        expected_hash = entry["sha256"]
+        if relative_path in locked_hashes:
+            return None
         relative = Path(relative_path)
         if relative.is_absolute() or ".." in relative.parts or "\\" in relative_path:
-            return False
+            return None
         locked_path = output_root / relative
         if locked_path.is_symlink() or not locked_path.is_file():
-            return False
+            return None
         if sha256_file(locked_path) != expected_hash:
-            return False
+            return None
         normalized = relative.as_posix()
+        locked_hashes[normalized] = expected_hash
         expected_files.add(normalized)
         parent = relative.parent
         while parent != Path("."):
@@ -177,30 +241,53 @@ def _is_managed_output(output_root: Path) -> bool:
     actual_directories = set()
     for path in output_root.rglob("*"):
         if path.is_symlink():
-            return False
+            return None
         relative = path.relative_to(output_root).as_posix()
         if path.is_file():
             actual_files.add(relative)
         elif path.is_dir():
             actual_directories.add(relative)
         else:
-            return False
-    return actual_files == expected_files and actual_directories == expected_directories
+            return None
+    if actual_files != expected_files or actual_directories != expected_directories:
+        return None
+
+    contract_records = [
+        (entry["relativePath"], entry["sha256"])
+        for entry in lock["files"]
+        if entry["relativePath"].startswith("contracts/")
+    ]
+    if _record_set_hash(contract_records) != lock["contractsHash"]:
+        return None
+    for asset in manifest["assets"]:
+        if locked_hashes.get(asset["deliveryRelativePath"]) != asset["sha256"]:
+            return None
+
+    snapshot_files = tuple(
+        sorted(
+            (relative_path, sha256_file(output_root / relative_path))
+            for relative_path in actual_files
+        )
+    )
+    return {
+        "files": snapshot_files,
+        "directories": tuple(sorted(actual_directories)),
+    }
 
 
-def _check_output_collision(output_root: Path, force: bool) -> None:
+def _authorize_output(output_root: Path, force: bool) -> dict | None:
     if not output_root.exists():
-        return
+        return None
     if not output_root.is_dir():
         raise FileExistsError(f"output collision with a non-directory path: {output_root}")
-    if not any(output_root.iterdir()):
-        return
-    if not _is_managed_output(output_root):
+    snapshot = _managed_output_snapshot(output_root)
+    if snapshot is None:
         raise FileExistsError(f"unmanaged output collision: {output_root}")
     if not force:
         raise FileExistsError(
             f"managed output already exists; pass force=True to replace it: {output_root}"
         )
+    return snapshot
 
 
 def _numbered(prefix: str, number: int, width: int = 3) -> str:
@@ -848,32 +935,45 @@ def _write_files(root: Path, files: dict[str, bytes]) -> None:
 
 
 def _copy_and_verify_sources(
-    source_root: Path, staging_root: Path, assets: list[dict]
+    source_root: Path,
+    staging_root: Path,
+    assets: list[dict],
+    image_snapshots: list[dict],
 ) -> None:
-    for asset in assets:
-        source = source_root / asset["sourceRelativePath"]
+    del source_root
+    for asset, image in zip(assets, image_snapshots):
         destination = staging_root / asset["deliveryRelativePath"]
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, destination)
+        destination.write_bytes(image["_content"])
 
     for asset in assets:
-        source = source_root / asset["sourceRelativePath"]
         copy = staging_root / asset["deliveryRelativePath"]
         try:
-            current_source_hash = sha256_file(source)
             copy_hash = sha256_file(copy)
         except OSError as error:
             raise RuntimeError(
-                f"source changed or drifted during preparation: {asset['sourceRelativePath']}"
+                f"copied asset changed or drifted: {asset['deliveryRelativePath']}"
             ) from error
-        if current_source_hash != asset["sha256"]:
-            raise RuntimeError(
-                f"source changed or drifted during preparation: {asset['sourceRelativePath']}"
-            )
         if copy_hash != asset["sha256"]:
             raise RuntimeError(
                 f"copied asset hash drift: {asset['deliveryRelativePath']}"
             )
+
+
+def _assert_source_set_unchanged(source_root: Path, initial_images: list[dict]) -> None:
+    try:
+        current_images = collect_images(source_root)
+    except (FileNotFoundError, NotADirectoryError, ValueError, OSError) as error:
+        raise RuntimeError("source set changed or drifted during preparation") from error
+    initial_records = [
+        {key: value for key, value in image.items() if key != "_content"}
+        for image in initial_images
+    ]
+    if (
+        _source_set_hash(current_images) != _source_set_hash(initial_records)
+        or current_images != initial_records
+    ):
+        raise RuntimeError("source set changed or drifted during preparation")
 
 
 def _write_design_lock(
@@ -913,27 +1013,47 @@ def _write_design_lock(
     lock_path.write_bytes(_json_bytes(lock))
 
 
-def _publish_staging(staging_root: Path, output_root: Path) -> None:
-    backup_root = None
+def _publication_collision(message: str) -> FileExistsError:
+    return FileExistsError(f"output drift/race collision: {message}")
+
+
+def _publish_staging(
+    staging_root: Path, output_root: Path, authorized_snapshot: dict | None
+) -> None:
+    if authorized_snapshot is None:
+        if output_root.exists():
+            raise _publication_collision(str(output_root))
+        staging_root.rename(output_root)
+        return
+
+    if _managed_output_snapshot(output_root) != authorized_snapshot:
+        raise _publication_collision(str(output_root))
+    backup_root = Path(
+        tempfile.mkdtemp(prefix=f".{output_root.name}.backup-", dir=output_root.parent)
+    )
+    backup_root.rmdir()
+    output_root.rename(backup_root)
+    if _managed_output_snapshot(backup_root) != authorized_snapshot:
+        if not output_root.exists():
+            backup_root.rename(output_root)
+        raise _publication_collision(str(output_root))
     if output_root.exists():
-        if any(output_root.iterdir()):
-            backup_root = Path(
-                tempfile.mkdtemp(
-                    prefix=f".{output_root.name}.backup-", dir=output_root.parent
-                )
-            )
-            backup_root.rmdir()
-            output_root.rename(backup_root)
-        else:
-            output_root.rmdir()
+        if not backup_root.exists():
+            raise _publication_collision(str(output_root))
+        raise _publication_collision(
+            f"new target appeared; original preserved at {backup_root.name}"
+        )
     try:
         staging_root.rename(output_root)
     except BaseException:
-        if backup_root is not None and backup_root.exists() and not output_root.exists():
+        if backup_root.exists() and not output_root.exists():
             backup_root.rename(output_root)
         raise
-    if backup_root is not None:
-        shutil.rmtree(backup_root)
+    if _managed_output_snapshot(backup_root) != authorized_snapshot:
+        raise _publication_collision(
+            f"authorized backup changed and was preserved at {backup_root.name}"
+        )
+    shutil.rmtree(backup_root)
 
 
 def prepare_handoff(
@@ -947,8 +1067,8 @@ def prepare_handoff(
     source_root, output_root = _validate_inputs(
         source_root, output_root, design_version, languages
     )
-    images = collect_images(source_root)
-    _check_output_collision(output_root, force)
+    images = _scan_image_snapshots(source_root)
+    authorized_snapshot = _authorize_output(output_root, force)
     source_set_hash = _source_set_hash(images)
     assets = _build_assets(images, design_version)
     generated_files = _build_generated_files(assets, design_version, source_set_hash)
@@ -961,7 +1081,7 @@ def prepare_handoff(
             f"P{number:03d}-S01-V01" for number in range(1, len(assets) + 1)
         ],
         "plannedFiles": planned_files,
-        "outputRoot": str(output_root),
+        "packageRoot": ".",
     }
     if dry_run:
         return result
@@ -973,9 +1093,11 @@ def prepare_handoff(
     published = False
     try:
         _write_files(staging_root, generated_files)
-        _copy_and_verify_sources(source_root, staging_root, assets)
+        _copy_and_verify_sources(source_root, staging_root, assets, images)
+        _assert_source_set_unchanged(source_root, images)
         _write_design_lock(staging_root, design_version, source_set_hash)
-        _publish_staging(staging_root, output_root)
+        _assert_source_set_unchanged(source_root, images)
+        _publish_staging(staging_root, output_root, authorized_snapshot)
         published = True
     finally:
         if not published and staging_root.exists():
