@@ -59,6 +59,15 @@ def _file_bytes(root):
     }
 
 
+def _quarantined_packages(recovery_root):
+    return sorted(
+        path
+        for path in recovery_root.iterdir()
+        if path.is_dir()
+        and (path / "contracts" / "design-lock.json").is_file()
+    )
+
+
 def _write_json(path, document):
     path.write_text(
         json.dumps(document, ensure_ascii=False, indent=2) + "\n",
@@ -574,8 +583,11 @@ class PrepareHandoffTests(unittest.TestCase):
                     self.source, output, design_version="v1"
                 )
 
-        quarantine = output.with_name(output.name + ".recovery") / "quarantine"
+        recovery = output.with_name(output.name + ".recovery")
+        quarantines = _quarantined_packages(recovery)
         self.assertFalse(output.exists())
+        self.assertEqual(len(quarantines), 1)
+        quarantine = quarantines[0]
         self.assertTrue((quarantine / "contracts" / "design-lock.json").is_file())
         self.assertEqual(
             (quarantine / "concurrent-owner.txt").read_text(encoding="utf-8"),
@@ -611,14 +623,124 @@ class PrepareHandoffTests(unittest.TestCase):
                 )
 
         recovery = output.with_name(output.name + ".recovery")
-        quarantine = recovery / "quarantine"
+        quarantines = _quarantined_packages(recovery)
         self.assertEqual(_file_bytes(output), previous_bytes)
         self.assertFalse((recovery / "previous").exists())
+        self.assertEqual(len(quarantines), 1)
+        quarantine = quarantines[0]
         self.assertTrue((quarantine / "contracts" / "design-lock.json").is_file())
         self.assertEqual(
             (quarantine / "concurrent-owner.txt").read_text(encoding="utf-8"),
             "new package owner data",
         )
+        self.assertNotIn(str(self.root), str(error.exception))
+
+    def test_occupied_fixed_quarantine_never_blocks_fresh_drift_recovery(self):
+        image = self.source / "screen.png"
+        _write_image(image, (2, 2), (10, 20, 30), "PNG")
+        output = self.root / "occupied-fixed-quarantine"
+        recovery = output.with_name(output.name + ".recovery")
+        fixed_quarantine = recovery / "quarantine"
+        real_publish = PREPARE_HANDOFF._publish_staging
+
+        def publish_then_occupy_fixed_path_and_mutate(*args, **kwargs):
+            publication = real_publish(*args, **kwargs)
+            fixed_quarantine.mkdir()
+            (fixed_quarantine / "owner.txt").write_text(
+                "existing recovery owner data", encoding="utf-8"
+            )
+            (output / "concurrent-owner.txt").write_text(
+                "new package owner data", encoding="utf-8"
+            )
+            _write_image(image, (3, 2), (30, 20, 10), "PNG")
+            return publication
+
+        with mock.patch.object(
+            PREPARE_HANDOFF,
+            "_publish_staging",
+            side_effect=publish_then_occupy_fixed_path_and_mutate,
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError, "post-publication|source.*drift"
+            ) as error:
+                PREPARE_HANDOFF.prepare_handoff(
+                    self.source, output, design_version="v1"
+                )
+
+        self.assertFalse(output.exists())
+        self.assertEqual(
+            (fixed_quarantine / "owner.txt").read_text(encoding="utf-8"),
+            "existing recovery owner data",
+        )
+        quarantines = _quarantined_packages(recovery)
+        self.assertEqual(len(quarantines), 1)
+        self.assertNotEqual(quarantines[0], fixed_quarantine)
+        self.assertEqual(
+            (quarantines[0] / "concurrent-owner.txt").read_text(encoding="utf-8"),
+            "new package owner data",
+        )
+        self.assertNotIn(str(self.root), str(error.exception))
+
+    def test_unique_quarantine_collision_retries_without_overwriting_owner_data(self):
+        image = self.source / "screen.png"
+        _write_image(image, (2, 2), (10, 20, 30), "PNG")
+        output = self.root / "unique-quarantine-collision"
+        PREPARE_HANDOFF.prepare_handoff(self.source, output, design_version="v1")
+        previous_bytes = _file_bytes(output)
+        _write_image(image, (3, 2), (20, 30, 40), "PNG")
+        recovery = output.with_name(output.name + ".recovery")
+        collision_token = "a" * 32
+        successful_token = "b" * 32
+        collision_quarantine = recovery / f"quarantine-{collision_token}"
+        successful_quarantine = recovery / f"quarantine-{successful_token}"
+        real_publish = PREPARE_HANDOFF._publish_staging
+
+        def publish_then_occupy_candidate_and_mutate(*args, **kwargs):
+            publication = real_publish(*args, **kwargs)
+            collision_quarantine.mkdir()
+            (collision_quarantine / "owner.txt").write_text(
+                "owner collision data", encoding="utf-8"
+            )
+            (output / "concurrent-owner.txt").write_text(
+                "new package owner data", encoding="utf-8"
+            )
+            _write_image(image, (4, 2), (40, 30, 20), "PNG")
+            return publication
+
+        with mock.patch.object(
+            PREPARE_HANDOFF,
+            "_publish_staging",
+            side_effect=publish_then_occupy_candidate_and_mutate,
+        ), mock.patch.object(
+            PREPARE_HANDOFF.secrets,
+            "token_hex",
+            side_effect=(collision_token, successful_token),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError, "post-publication|source.*drift"
+            ) as error:
+                PREPARE_HANDOFF.prepare_handoff(
+                    self.source,
+                    output,
+                    design_version="v1",
+                    force=True,
+                )
+
+        self.assertEqual(_file_bytes(output), previous_bytes)
+        self.assertEqual(
+            (collision_quarantine / "owner.txt").read_text(encoding="utf-8"),
+            "owner collision data",
+        )
+        self.assertTrue(
+            (successful_quarantine / "contracts" / "design-lock.json").is_file()
+        )
+        self.assertEqual(
+            (successful_quarantine / "concurrent-owner.txt").read_text(
+                encoding="utf-8"
+            ),
+            "new package owner data",
+        )
+        self.assertFalse((recovery / "previous").exists())
         self.assertNotIn(str(self.root), str(error.exception))
 
     def test_corrupt_lock_metadata_never_authorizes_force_replacement(self):

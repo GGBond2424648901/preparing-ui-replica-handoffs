@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import argparse
 import csv
+import errno
 import hashlib
 import io
 import json
 from pathlib import Path
 import re
+import secrets
 import shutil
 import tempfile
 
@@ -1045,7 +1047,6 @@ def _publish_staging(
     publication = {
         "recoveryRoot": recovery_root,
         "previousRoot": None,
-        "quarantineRoot": recovery_root / "quarantine",
     }
     if authorized_snapshot is None:
         if output_root.exists():
@@ -1089,14 +1090,25 @@ def _publish_staging(
     return publication
 
 
+def _move_to_unique_quarantine(output_root: Path, recovery_root: Path) -> Path:
+    while True:
+        quarantine_root = recovery_root / f"quarantine-{secrets.token_hex(16)}"
+        try:
+            output_root.rename(quarantine_root)
+        except FileExistsError:
+            continue
+        except OSError as error:
+            if error.errno in {errno.EEXIST, errno.ENOTEMPTY}:
+                continue
+            raise
+        return quarantine_root
+
+
 def _quarantine_after_source_drift(output_root: Path, publication: dict) -> None:
-    quarantine_root = publication["quarantineRoot"]
     previous_root = publication["previousRoot"]
-    if quarantine_root.exists():
-        raise RuntimeError("post-publication source drift; quarantine collision")
     if not output_root.exists():
         raise RuntimeError("post-publication source drift; public target is missing")
-    output_root.rename(quarantine_root)
+    _move_to_unique_quarantine(output_root, publication["recoveryRoot"])
     if previous_root is not None:
         if output_root.exists():
             raise RuntimeError("post-publication source drift; restore collision")
