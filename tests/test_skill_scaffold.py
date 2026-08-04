@@ -90,7 +90,7 @@ SCAFFOLD_ENTRY_CONTRACT = {
         },
     },
     "assets/templates": {
-        "directories": {"required": set(), "allowed": {"docs"}},
+        "directories": {"required": {"docs"}, "allowed": {"docs"}},
         "files": {
             "required": {".gitkeep"},
             "allowed": {
@@ -99,6 +99,44 @@ SCAFFOLD_ENTRY_CONTRACT = {
                 "handoff-config.template.json",
                 "requirement-ledger.template.csv",
                 "visual-qa-matrix.template.csv",
+            },
+        },
+    },
+    "assets/templates/docs": {
+        "directories": {"required": {"en", "zh"}, "allowed": {"en", "zh"}},
+        "files": {"required": set(), "allowed": set()},
+    },
+    "assets/templates/docs/en": {
+        "directories": {"required": set(), "allowed": set()},
+        "files": {
+            "required": {
+                "component-specification.template.md",
+                "design-catalog.template.md",
+                "page-contract.template.md",
+                "ui-implementation-guide.template.md",
+            },
+            "allowed": {
+                "component-specification.template.md",
+                "design-catalog.template.md",
+                "page-contract.template.md",
+                "ui-implementation-guide.template.md",
+            },
+        },
+    },
+    "assets/templates/docs/zh": {
+        "directories": {"required": set(), "allowed": set()},
+        "files": {
+            "required": {
+                "component-specification.template.md",
+                "design-catalog.template.md",
+                "page-contract.template.md",
+                "ui-implementation-guide.template.md",
+            },
+            "allowed": {
+                "component-specification.template.md",
+                "design-catalog.template.md",
+                "page-contract.template.md",
+                "ui-implementation-guide.template.md",
             },
         },
     },

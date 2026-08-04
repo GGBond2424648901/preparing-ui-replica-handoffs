@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Generated UI design lock",
+  "description": "A script-computed lock record; status is not a hand-written pass claim.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "designVersion",
+    "generatedAt",
+    "sourceSetHash",
+    "contractsHash",
+    "files",
+    "status"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "designVersion": { "type": "string", "minLength": 1 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "sourceSetHash": { "$ref": "#/$defs/sha256" },
+    "contractsHash": { "$ref": "#/$defs/sha256" },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["relativePath", "sha256"],
+        "properties": {
+          "relativePath": { "$ref": "#/$defs/relativePath" },
+          "sha256": { "$ref": "#/$defs/sha256" }
+        }
+      }
+    },
+    "status": { "enum": ["generated", "invalid"] }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z]:[\\\\/])(?!/)(?!\\\\\\\\)(?!file:)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+"
+    }
+  }
+}

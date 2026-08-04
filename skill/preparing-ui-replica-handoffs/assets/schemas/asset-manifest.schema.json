@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UI design asset manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "designVersion", "sourceSetHash", "assets"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "designVersion": { "type": "string", "minLength": 1 },
+    "sourceSetHash": { "$ref": "#/$defs/sha256" },
+    "assets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/asset" }
+    }
+  },
+  "$defs": {
+    "evidenceLevel": {
+      "enum": ["direct", "derived", "candidate", "approved", "unknown"]
+    },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z]:[\\\\/])(?!/)(?!\\\\\\\\)(?!file:)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+"
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assetId",
+        "sourceRelativePath",
+        "deliveryRelativePath",
+        "mediaType",
+        "byteSize",
+        "width",
+        "height",
+        "sha256",
+        "duplicateGroupId",
+        "evidenceLevel"
+      ],
+      "properties": {
+        "assetId": { "type": "string", "pattern": "^A[0-9]{3,}$" },
+        "sourceRelativePath": { "$ref": "#/$defs/relativePath" },
+        "deliveryRelativePath": { "$ref": "#/$defs/relativePath" },
+        "mediaType": {
+          "enum": ["image/png", "image/jpeg", "image/webp", "image/gif"]
+        },
+        "byteSize": { "type": "integer", "minimum": 1 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "duplicateGroupId": {
+          "type": ["string", "null"],
+          "pattern": "^D[0-9]{3,}$"
+        },
+        "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" }
+      }
+    }
+  }
+}

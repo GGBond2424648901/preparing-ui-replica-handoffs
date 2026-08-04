@@ -1,0 +1,333 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UI page, state, and variant inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "pages"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "pages": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/page" }
+    }
+  },
+  "$defs": {
+    "evidenceLevel": {
+      "enum": ["direct", "derived", "candidate", "approved", "unknown"]
+    },
+    "lifecycleStatus": {
+      "enum": ["unknown", "proposed", "candidate", "approved"]
+    },
+    "qaStatus": { "enum": ["not-run", "pass", "fail", "blocked"] },
+    "localizedText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["zh-CN", "en-US"],
+      "properties": {
+        "zh-CN": { "type": "string" },
+        "en-US": { "type": "string" }
+      }
+    },
+    "gapIds": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^G[0-9]{3,}$" },
+      "uniqueItems": true
+    },
+    "bounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "width": { "type": "number", "minimum": 0 },
+        "height": { "type": "number", "minimum": 0 }
+      }
+    },
+    "page": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pageId",
+        "stateId",
+        "variantId",
+        "sourceAssetIds",
+        "route",
+        "canvas",
+        "shell",
+        "regions",
+        "layoutRelationships",
+        "copy",
+        "icons",
+        "components",
+        "data",
+        "interactions",
+        "responsiveVariants",
+        "acceptanceCriteria",
+        "evidenceLevel",
+        "status",
+        "gapIds"
+      ],
+      "properties": {
+        "pageId": { "type": "string", "pattern": "^P[0-9]{3,}$" },
+        "stateId": { "type": "string", "pattern": "^S[0-9]{2,}$" },
+        "variantId": { "type": "string", "pattern": "^V[0-9]{2,}$" },
+        "sourceAssetIds": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^A[0-9]{3,}$" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "route": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "evidenceLevel"],
+          "properties": {
+            "path": { "type": ["string", "null"] },
+            "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" }
+          }
+        },
+        "canvas": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["width", "height", "unit"],
+          "properties": {
+            "width": { "type": "number", "exclusiveMinimum": 0 },
+            "height": { "type": "number", "exclusiveMinimum": 0 },
+            "unit": { "const": "px" }
+          }
+        },
+        "shell": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["shellId", "evidenceLevel"],
+          "properties": {
+            "shellId": { "type": "string", "minLength": 1 },
+            "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" }
+          }
+        },
+        "regions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["regionId", "role", "evidenceLevel"],
+            "properties": {
+              "regionId": { "type": "string", "minLength": 1 },
+              "role": {
+                "enum": [
+                  "header",
+                  "navigation",
+                  "main",
+                  "aside",
+                  "footer",
+                  "overlay",
+                  "content",
+                  "unknown"
+                ]
+              },
+              "bounds": { "$ref": "#/$defs/bounds" },
+              "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" }
+            }
+          }
+        },
+        "layoutRelationships": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "relationshipId",
+              "containerId",
+              "display",
+              "relation",
+              "targetIds",
+              "evidenceLevel"
+            ],
+            "properties": {
+              "relationshipId": { "type": "string", "minLength": 1 },
+              "containerId": { "type": "string", "minLength": 1 },
+              "display": { "enum": ["block", "flex", "grid", "absolute", "unknown"] },
+              "relation": {
+                "enum": [
+                  "contains",
+                  "aligns",
+                  "stacks",
+                  "distributes",
+                  "overlaps",
+                  "scrolls",
+                  "unknown"
+                ]
+              },
+              "targetIds": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 },
+                "minItems": 1,
+                "uniqueItems": true
+              },
+              "ratio": { "type": ["string", "null"] },
+              "gap": { "type": ["number", "null"], "minimum": 0 },
+              "minSize": { "type": ["number", "null"], "minimum": 0 },
+              "overflow": { "enum": ["visible", "hidden", "auto", "scroll", "unknown"] },
+              "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" }
+            }
+          }
+        },
+        "copy": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "copyId",
+              "text",
+              "classification",
+              "evidenceLevel",
+              "sourceBounds",
+              "gapId"
+            ],
+            "properties": {
+              "copyId": { "type": "string", "minLength": 1 },
+              "text": { "$ref": "#/$defs/localizedText" },
+              "classification": {
+                "enum": ["verbatim", "verified", "inferred", "unknown"]
+              },
+              "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
+              "sourceBounds": { "$ref": "#/$defs/bounds" },
+              "gapId": {
+                "type": ["string", "null"],
+                "pattern": "^G[0-9]{3,}$"
+              }
+            }
+          }
+        },
+        "icons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["iconId", "assetId", "meaning", "evidenceLevel"],
+            "properties": {
+              "iconId": { "type": "string", "minLength": 1 },
+              "assetId": { "type": ["string", "null"] },
+              "meaning": { "$ref": "#/$defs/localizedText" },
+              "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" }
+            }
+          }
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["instanceId", "componentId", "regionId", "evidenceLevel"],
+            "properties": {
+              "instanceId": { "type": "string", "minLength": 1 },
+              "componentId": { "type": "string", "minLength": 1 },
+              "regionId": { "type": "string", "minLength": 1 },
+              "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" }
+            }
+          }
+        },
+        "data": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["dataId", "classification", "valueShape", "evidenceLevel"],
+            "properties": {
+              "dataId": { "type": "string", "minLength": 1 },
+              "classification": { "enum": ["sample", "verified", "unknown"] },
+              "valueShape": { "type": "string", "minLength": 1 },
+              "sourceRef": { "type": ["string", "null"] },
+              "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" }
+            }
+          }
+        },
+        "interactions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "interactionId",
+              "trigger",
+              "outcome",
+              "status",
+              "evidenceLevel",
+              "gapId"
+            ],
+            "properties": {
+              "interactionId": { "type": "string", "minLength": 1 },
+              "trigger": { "type": "string", "minLength": 1 },
+              "outcome": { "$ref": "#/$defs/localizedText" },
+              "status": { "$ref": "#/$defs/lifecycleStatus" },
+              "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
+              "gapId": {
+                "type": ["string", "null"],
+                "pattern": "^G[0-9]{3,}$"
+              }
+            },
+            "allOf": [
+              {
+                "if": { "properties": { "status": { "enum": ["unknown", "proposed"] } } },
+                "then": { "properties": { "gapId": { "type": "string" } } }
+              }
+            ]
+          }
+        },
+        "responsiveVariants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "responsiveVariantId",
+              "mode",
+              "minWidth",
+              "evidenceLevel",
+              "status",
+              "gapIds"
+            ],
+            "properties": {
+              "responsiveVariantId": { "type": "string", "minLength": 1 },
+              "mode": { "enum": ["baseline-scroll", "responsive"] },
+              "minWidth": { "type": "number", "minimum": 0 },
+              "maxWidth": { "type": ["number", "null"], "minimum": 0 },
+              "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
+              "status": { "$ref": "#/$defs/lifecycleStatus" },
+              "gapIds": { "$ref": "#/$defs/gapIds" }
+            }
+          }
+        },
+        "acceptanceCriteria": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["qaId", "evidenceTypes", "status"],
+            "properties": {
+              "qaId": { "type": "string", "pattern": "^QA[0-9]{3,}$" },
+              "evidenceTypes": {
+                "type": "array",
+                "items": { "enum": ["visual", "structural", "interaction"] },
+                "minItems": 1,
+                "uniqueItems": true
+              },
+              "status": { "$ref": "#/$defs/qaStatus" }
+            }
+          }
+        },
+        "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
+        "status": { "$ref": "#/$defs/lifecycleStatus" },
+        "gapIds": { "$ref": "#/$defs/gapIds" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "enum": ["unknown", "proposed"] } } },
+          "then": { "properties": { "gapIds": { "minItems": 1 } } }
+        }
+      ]
+    }
+  }
+}
