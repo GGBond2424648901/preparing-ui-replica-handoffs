@@ -1,8 +1,11 @@
 import csv
+import errno
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
+import subprocess
 import tempfile
 import types
 import unittest
@@ -61,11 +64,30 @@ def _file_bytes(root):
 
 def _quarantined_packages(recovery_root):
     return sorted(
-        path
-        for path in recovery_root.iterdir()
-        if path.is_dir()
-        and (path / "contracts" / "design-lock.json").is_file()
+        reservation / "package"
+        for reservation in recovery_root.iterdir()
+        if reservation.is_dir()
+        and not reservation.is_symlink()
+        and (
+            reservation / "package" / "contracts" / "design-lock.json"
+        ).is_file()
     )
+
+
+def _create_directory_link(link, target):
+    try:
+        link.symlink_to(target, target_is_directory=True)
+        return "symlink"
+    except OSError as error:
+        if os.name != "nt" or getattr(error, "winerror", None) != 1314:
+            raise
+    subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return "junction"
 
 
 def _write_json(path, document):
@@ -103,6 +125,137 @@ class PrepareHandoffTests(unittest.TestCase):
         _write_image(jpeg, (4, 2), (80, 90, 100), "JPEG")
         (self.source / "notes.txt").write_text("not an image", encoding="utf-8")
         return duplicate, original, jpeg
+
+    def assert_quarantine_reservation_collision_recovery(self, collision_kind):
+        for managed_output in (False, True):
+            with self.subTest(
+                collision_kind=collision_kind, managed_output=managed_output
+            ):
+                case_root = self.root / (
+                    f"{collision_kind}-{'managed' if managed_output else 'fresh'}"
+                )
+                source = case_root / "source"
+                output = case_root / "output"
+                image = source / "screen.png"
+                _write_image(image, (2, 2), (10, 20, 30), "PNG")
+                previous_bytes = None
+                if managed_output:
+                    PREPARE_HANDOFF.prepare_handoff(
+                        source, output, design_version="v1"
+                    )
+                    previous_bytes = _file_bytes(output)
+                    _write_image(image, (3, 2), (20, 30, 40), "PNG")
+
+                recovery = output.with_name(output.name + ".recovery")
+                collision_token = "a" * 32
+                successful_token = "b" * 32
+                collision_reservation = recovery / f"quarantine-{collision_token}"
+                successful_reservation = recovery / f"quarantine-{successful_token}"
+                symlink_target = recovery / "symlink-owner-target"
+                link_kind = []
+                real_publish = PREPARE_HANDOFF._publish_staging
+
+                def publish_then_collide_and_mutate(*args, **kwargs):
+                    publication = real_publish(*args, **kwargs)
+                    if collision_kind == "regular-file":
+                        collision_reservation.write_text(
+                            "regular file owner data", encoding="utf-8"
+                        )
+                    elif collision_kind == "empty-directory":
+                        collision_reservation.mkdir()
+                    elif collision_kind == "non-empty-directory":
+                        collision_reservation.mkdir()
+                        (collision_reservation / "owner.txt").write_text(
+                            "directory owner data", encoding="utf-8"
+                        )
+                    elif collision_kind == "symlink":
+                        symlink_target.mkdir()
+                        (symlink_target / "owner.txt").write_text(
+                            "symlink owner data", encoding="utf-8"
+                        )
+                        link_kind.append(
+                            _create_directory_link(
+                                collision_reservation, symlink_target
+                            )
+                        )
+                    else:
+                        self.fail(f"unsupported collision kind: {collision_kind}")
+                    (output / "concurrent-owner.txt").write_text(
+                        "new package owner data", encoding="utf-8"
+                    )
+                    _write_image(image, (4, 2), (40, 30, 20), "PNG")
+                    return publication
+
+                with mock.patch.object(
+                    PREPARE_HANDOFF,
+                    "_publish_staging",
+                    side_effect=publish_then_collide_and_mutate,
+                ), mock.patch.object(
+                    PREPARE_HANDOFF.secrets,
+                    "token_hex",
+                    side_effect=(collision_token, successful_token),
+                ):
+                    with self.assertRaisesRegex(
+                        RuntimeError, "post-publication|source.*drift"
+                    ) as error:
+                        PREPARE_HANDOFF.prepare_handoff(
+                            source,
+                            output,
+                            design_version="v1",
+                            force=managed_output,
+                        )
+
+                if managed_output:
+                    self.assertEqual(_file_bytes(output), previous_bytes)
+                    self.assertFalse((recovery / "previous").exists())
+                else:
+                    self.assertFalse(output.exists())
+                if collision_kind == "regular-file":
+                    self.assertFalse(collision_reservation.is_symlink())
+                    self.assertEqual(
+                        collision_reservation.read_text(encoding="utf-8"),
+                        "regular file owner data",
+                    )
+                elif collision_kind == "empty-directory":
+                    self.assertFalse(collision_reservation.is_symlink())
+                    self.assertEqual(list(collision_reservation.iterdir()), [])
+                elif collision_kind == "non-empty-directory":
+                    self.assertFalse(collision_reservation.is_symlink())
+                    self.assertEqual(
+                        (collision_reservation / "owner.txt").read_text(
+                            encoding="utf-8"
+                        ),
+                        "directory owner data",
+                    )
+                else:
+                    self.assertEqual(len(link_kind), 1)
+                    if link_kind[0] == "symlink":
+                        self.assertTrue(collision_reservation.is_symlink())
+                        self.assertEqual(
+                            Path(os.readlink(collision_reservation)), symlink_target
+                        )
+                    else:
+                        self.assertFalse(collision_reservation.is_symlink())
+                        self.assertEqual(
+                            collision_reservation.resolve(), symlink_target.resolve()
+                        )
+                    self.assertEqual(
+                        (symlink_target / "owner.txt").read_text(encoding="utf-8"),
+                        "symlink owner data",
+                    )
+                quarantined_package = successful_reservation / "package"
+                self.assertTrue(
+                    (
+                        quarantined_package / "contracts" / "design-lock.json"
+                    ).is_file()
+                )
+                self.assertEqual(
+                    (quarantined_package / "concurrent-owner.txt").read_text(
+                        encoding="utf-8"
+                    ),
+                    "new package owner data",
+                )
+                self.assertNotIn(str(self.root), str(error.exception))
 
     def assert_contract_valid(self, schema_name, document):
         schema = json.loads((SCHEMA_ROOT / schema_name).read_text(encoding="utf-8"))
@@ -681,6 +834,72 @@ class PrepareHandoffTests(unittest.TestCase):
         )
         self.assertNotIn(str(self.root), str(error.exception))
 
+    def test_regular_file_quarantine_reservation_collision_survives_retry(self):
+        self.assert_quarantine_reservation_collision_recovery("regular-file")
+
+    def test_empty_directory_quarantine_reservation_collision_survives_retry(self):
+        self.assert_quarantine_reservation_collision_recovery("empty-directory")
+
+    def test_non_empty_directory_quarantine_reservation_collision_survives_retry(self):
+        self.assert_quarantine_reservation_collision_recovery(
+            "non-empty-directory"
+        )
+
+    def test_symlink_quarantine_reservation_collision_survives_retry(self):
+        self.assert_quarantine_reservation_collision_recovery("symlink")
+
+    def test_child_enotdir_collision_preserves_reservation_and_retries(self):
+        output = self.root / "enotdir-public-package"
+        recovery = output.with_name(output.name + ".recovery")
+        output.mkdir()
+        (output / "owner.txt").write_text("public package", encoding="utf-8")
+        recovery.mkdir()
+        collision_token = "a" * 32
+        successful_token = "b" * 32
+        collision_reservation = recovery / f"quarantine-{collision_token}"
+        successful_package = (
+            recovery / f"quarantine-{successful_token}" / "package"
+        )
+        real_rename = Path.rename
+        injected_targets = []
+
+        def raise_enotdir_after_child_collision(path, target):
+            target = Path(target)
+            if path == output and not injected_targets:
+                target.write_text("unexpected child data", encoding="utf-8")
+                injected_targets.append(target)
+                raise NotADirectoryError(
+                    errno.ENOTDIR, "simulated occupied regular-file target"
+                )
+            return real_rename(path, target)
+
+        with mock.patch.object(
+            Path,
+            "rename",
+            autospec=True,
+            side_effect=raise_enotdir_after_child_collision,
+        ), mock.patch.object(
+            PREPARE_HANDOFF.secrets,
+            "token_hex",
+            side_effect=(collision_token, successful_token),
+        ):
+            quarantined_package = PREPARE_HANDOFF._move_to_unique_quarantine(
+                output, recovery
+            )
+
+        collision_child = collision_reservation / "package"
+        self.assertEqual(injected_targets, [collision_child])
+        self.assertEqual(
+            collision_child.read_text(encoding="utf-8"),
+            "unexpected child data",
+        )
+        self.assertEqual(quarantined_package, successful_package)
+        self.assertFalse(output.exists())
+        self.assertEqual(
+            (successful_package / "owner.txt").read_text(encoding="utf-8"),
+            "public package",
+        )
+
     def test_unique_quarantine_collision_retries_without_overwriting_owner_data(self):
         image = self.source / "screen.png"
         _write_image(image, (2, 2), (10, 20, 30), "PNG")
@@ -692,7 +911,9 @@ class PrepareHandoffTests(unittest.TestCase):
         collision_token = "a" * 32
         successful_token = "b" * 32
         collision_quarantine = recovery / f"quarantine-{collision_token}"
-        successful_quarantine = recovery / f"quarantine-{successful_token}"
+        successful_quarantine = (
+            recovery / f"quarantine-{successful_token}" / "package"
+        )
         real_publish = PREPARE_HANDOFF._publish_staging
 
         def publish_then_occupy_candidate_and_mutate(*args, **kwargs):

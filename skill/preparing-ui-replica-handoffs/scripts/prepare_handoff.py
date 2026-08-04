@@ -1092,15 +1092,38 @@ def _publish_staging(
 
 def _move_to_unique_quarantine(output_root: Path, recovery_root: Path) -> Path:
     while True:
-        quarantine_root = recovery_root / f"quarantine-{secrets.token_hex(16)}"
+        reservation_root = recovery_root / f"quarantine-{secrets.token_hex(16)}"
+        try:
+            reservation_root.mkdir(mode=0o700)
+        except FileExistsError:
+            continue
+        quarantine_root = reservation_root / "package"
+        try:
+            quarantine_root.lstat()
+        except FileNotFoundError:
+            pass
+        except NotADirectoryError:
+            continue
+        else:
+            continue
         try:
             output_root.rename(quarantine_root)
         except FileExistsError:
             continue
         except OSError as error:
-            if error.errno in {errno.EEXIST, errno.ENOTEMPTY}:
+            if error.errno in {
+                errno.EEXIST,
+                errno.ENOTEMPTY,
+                errno.ENOTDIR,
+                errno.EISDIR,
+            }:
                 continue
-            raise
+            try:
+                quarantine_root.lstat()
+            except (FileNotFoundError, NotADirectoryError):
+                raise error
+            else:
+                continue
         return quarantine_root
 
 
