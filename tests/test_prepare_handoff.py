@@ -298,7 +298,84 @@ class PrepareHandoffTests(unittest.TestCase):
 
         ordinary_rename.assert_not_called()
 
-    def test_unsupported_capability_fails_before_managed_publication(self):
+    def test_preflight_cleanup_never_deletes_a_raced_in_empty_directory(self):
+        replacement = {}
+
+        def collide_after_replacing_source(source, destination):
+            source.rmdir()
+            source.mkdir()
+            replacement["path"] = source
+            replacement["identity"] = (source.stat().st_dev, source.stat().st_ino)
+            raise FileExistsError(errno.EEXIST, "destination exists")
+
+        with mock.patch.object(
+            PREPARE_HANDOFF,
+            "_atomic_no_replace_directory_move",
+            side_effect=collide_after_replacing_source,
+        ):
+            PREPARE_HANDOFF._preflight_atomic_no_replace_directory_move(self.root)
+
+        raced_path = replacement["path"]
+        self.assertTrue(raced_path.is_dir())
+        self.assertEqual(
+            (raced_path.stat().st_dev, raced_path.stat().st_ino),
+            replacement["identity"],
+        )
+
+    def test_publication_uses_real_atomic_moves_without_a_probe_or_path_rename(self):
+        image = self.source / "screen.png"
+        output = self.root / "atomic-publication"
+        _write_image(image, (2, 2), (10, 20, 30), "PNG")
+        real_atomic_move = PREPARE_HANDOFF._atomic_no_replace_directory_move
+
+        with mock.patch.object(
+            PREPARE_HANDOFF,
+            "_preflight_atomic_no_replace_directory_move",
+            side_effect=AssertionError("standalone probe must not run"),
+        ) as preflight, mock.patch.object(
+            PREPARE_HANDOFF,
+            "_atomic_no_replace_directory_move",
+            wraps=real_atomic_move,
+        ) as atomic_move, mock.patch.object(
+            Path,
+            "rename",
+            side_effect=AssertionError("ordinary path rename must not publish"),
+        ):
+            PREPARE_HANDOFF.prepare_handoff(
+                self.source, output, design_version="v1"
+            )
+            _write_image(image, (3, 2), (30, 20, 10), "PNG")
+            PREPARE_HANDOFF.prepare_handoff(
+                self.source, output, design_version="v1", force=True
+            )
+
+        preflight.assert_not_called()
+        self.assertGreaterEqual(atomic_move.call_count, 3)
+        self.assertTrue((output / "contracts" / "design-lock.json").is_file())
+
+    def test_failed_unpublished_staging_is_preserved_without_recursive_cleanup(self):
+        image = self.source / "screen.png"
+        output = self.root / "failed-publication"
+        _write_image(image, (2, 2), (10, 20, 30), "PNG")
+
+        with mock.patch.object(
+            PREPARE_HANDOFF, "_write_files", side_effect=RuntimeError("write failed")
+        ), mock.patch.object(
+            PREPARE_HANDOFF.shutil,
+            "rmtree",
+            side_effect=AssertionError("unpublished data must not be deleted"),
+        ) as recursive_cleanup:
+            with self.assertRaisesRegex(RuntimeError, "write failed"):
+                PREPARE_HANDOFF.prepare_handoff(
+                    self.source, output, design_version="v1"
+                )
+
+        recursive_cleanup.assert_not_called()
+        preserved = list(self.root.glob(".failed-publication.prepare-*"))
+        self.assertEqual(len(preserved), 1)
+        self.assertFalse(output.exists())
+
+    def test_unsupported_capability_fails_without_replacing_managed_publication(self):
         image = self.source / "screen.png"
         output = self.root / "managed-preflight"
         _write_image(image, (2, 2), (10, 20, 30), "PNG")
@@ -308,18 +385,15 @@ class PrepareHandoffTests(unittest.TestCase):
 
         with mock.patch.object(
             PREPARE_HANDOFF,
-            "_preflight_atomic_no_replace_directory_move",
+            "_atomic_no_replace_directory_move",
             side_effect=RuntimeError("atomic no-replace unsupported"),
-        ) as preflight, mock.patch.object(
-            PREPARE_HANDOFF, "_publish_staging"
-        ) as publish:
+        ) as atomic_move:
             with self.assertRaisesRegex(RuntimeError, "atomic.*unsupported"):
                 PREPARE_HANDOFF.prepare_handoff(
                     self.source, output, design_version="v1", force=True
                 )
 
-        preflight.assert_called_once_with(output.parent)
-        publish.assert_not_called()
+        atomic_move.assert_called_once()
         self.assertEqual(_file_bytes(output), previous_bytes)
 
     def assert_quarantine_reservation_collision_recovery(self, collision_kind):
@@ -353,6 +427,7 @@ class PrepareHandoffTests(unittest.TestCase):
 
                 def publish_then_collide_and_mutate(*args, **kwargs):
                     publication = real_publish(*args, **kwargs)
+                    recovery.mkdir(exist_ok=True)
                     if collision_kind == "regular-file":
                         collision_reservation.write_text(
                             "regular file owner data", encoding="utf-8"
@@ -994,7 +1069,7 @@ class PrepareHandoffTests(unittest.TestCase):
 
         def publish_then_occupy_fixed_path_and_mutate(*args, **kwargs):
             publication = real_publish(*args, **kwargs)
-            fixed_quarantine.mkdir()
+            fixed_quarantine.mkdir(parents=True)
             (fixed_quarantine / "owner.txt").write_text(
                 "existing recovery owner data", encoding="utf-8"
             )

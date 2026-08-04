@@ -172,11 +172,10 @@ def _atomic_no_replace_directory_move(source: Path, destination: Path) -> None:
 
 
 def _remove_empty_probe_paths(paths: tuple[Path, ...]) -> None:
-    for path in paths:
-        try:
-            path.rmdir()
-        except OSError:
-            pass
+    # Path-based cleanup cannot prove that a same-owner process did not replace
+    # an empty probe directory after the capability check. Preserve probe
+    # paths instead of risking deletion of raced-in owner data.
+    del paths
 
 
 def _preflight_atomic_no_replace_directory_move(parent_root: Path) -> None:
@@ -1196,16 +1195,29 @@ def _recovery_root(output_root: Path) -> Path:
 
 
 def _remove_empty_recovery_root(recovery_root: Path) -> None:
-    try:
-        recovery_root.rmdir()
-    except OSError:
-        pass
+    # Recovery directories are intentionally retained. Removing an apparently
+    # empty path has an unavoidable same-owner replacement race.
+    del recovery_root
 
 
 def _publish_staging(
     staging_root: Path, output_root: Path, authorized_snapshot: dict | None
 ) -> dict:
     recovery_root = _recovery_root(output_root)
+    publication = {
+        "recoveryRoot": recovery_root,
+        "previousRoot": None,
+    }
+    if authorized_snapshot is None:
+        if os.path.lexists(recovery_root):
+            raise _publication_collision(
+                f"recovery name already exists: {recovery_root.name}"
+            )
+        if os.path.lexists(output_root):
+            raise _publication_collision(output_root.name)
+        _atomic_no_replace_directory_move(staging_root, output_root)
+        return publication
+
     try:
         recovery_root.mkdir()
     except FileExistsError as error:
@@ -1213,31 +1225,14 @@ def _publish_staging(
             f"recovery name already exists: {recovery_root.name}"
         ) from error
 
-    publication = {
-        "recoveryRoot": recovery_root,
-        "previousRoot": None,
-    }
-    if authorized_snapshot is None:
-        if output_root.exists():
-            _remove_empty_recovery_root(recovery_root)
-            raise _publication_collision(output_root.name)
-        try:
-            staging_root.rename(output_root)
-        except BaseException:
-            _remove_empty_recovery_root(recovery_root)
-            raise
-        return publication
-
     if _managed_output_snapshot(output_root) != authorized_snapshot:
-        _remove_empty_recovery_root(recovery_root)
         raise _publication_collision(output_root.name)
     previous_root = recovery_root / "previous"
     publication["previousRoot"] = previous_root
-    output_root.rename(previous_root)
+    _atomic_no_replace_directory_move(output_root, previous_root)
     if _managed_output_snapshot(previous_root) != authorized_snapshot:
         if not output_root.exists():
-            previous_root.rename(output_root)
-        _remove_empty_recovery_root(recovery_root)
+            _atomic_no_replace_directory_move(previous_root, output_root)
         raise _publication_collision(output_root.name)
     if output_root.exists():
         raise _publication_collision(
@@ -1246,15 +1241,13 @@ def _publish_staging(
         )
     if _managed_output_snapshot(previous_root) != authorized_snapshot:
         if not output_root.exists():
-            previous_root.rename(output_root)
-        _remove_empty_recovery_root(recovery_root)
+            _atomic_no_replace_directory_move(previous_root, output_root)
         raise _publication_collision(output_root.name)
     try:
-        staging_root.rename(output_root)
+        _atomic_no_replace_directory_move(staging_root, output_root)
     except BaseException:
         if previous_root.exists() and not output_root.exists():
-            previous_root.rename(output_root)
-        _remove_empty_recovery_root(recovery_root)
+            _atomic_no_replace_directory_move(previous_root, output_root)
         raise
     return publication
 
@@ -1280,11 +1273,14 @@ def _quarantine_after_source_drift(output_root: Path, publication: dict) -> None
     previous_root = publication["previousRoot"]
     if not output_root.exists():
         raise RuntimeError("post-publication source drift; public target is missing")
-    _move_to_unique_quarantine(output_root, publication["recoveryRoot"])
+    recovery_root = publication["recoveryRoot"]
+    if not recovery_root.exists():
+        recovery_root.mkdir()
+    _move_to_unique_quarantine(output_root, recovery_root)
     if previous_root is not None:
         if output_root.exists():
             raise RuntimeError("post-publication source drift; restore collision")
-        previous_root.rename(output_root)
+        _atomic_no_replace_directory_move(previous_root, output_root)
 
 
 def _finalize_publication(publication: dict) -> None:
@@ -1323,7 +1319,6 @@ def prepare_handoff(
         return result
 
     output_root.parent.mkdir(parents=True, exist_ok=True)
-    _preflight_atomic_no_replace_directory_move(output_root.parent)
     staging_root = Path(
         tempfile.mkdtemp(prefix=f".{output_root.name}.prepare-", dir=output_root.parent)
     )
@@ -1351,8 +1346,9 @@ def prepare_handoff(
         _finalize_publication(publication)
         published = True
     finally:
-        if not published and staging_root.exists():
-            shutil.rmtree(staging_root)
+        # Unpublished staging is preserved for recovery/inspection. Recursive
+        # path cleanup could delete same-owner data inserted after a check.
+        pass
     return result
 
 
