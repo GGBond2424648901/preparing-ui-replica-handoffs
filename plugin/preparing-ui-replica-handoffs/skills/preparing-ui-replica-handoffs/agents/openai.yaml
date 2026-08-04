@@ -1,0 +1,4 @@
+interface:
+  display_name: "UI 复刻交付准备 / UI Replica Handoff Prep"
+  short_description: "中英双语 UI 复刻交付准备 / Bilingual UI handoff preparation"
+  default_prompt: "Use $preparing-ui-replica-handoffs to prepare a bilingual, evidence-bounded UI replica handoff package from these design images."

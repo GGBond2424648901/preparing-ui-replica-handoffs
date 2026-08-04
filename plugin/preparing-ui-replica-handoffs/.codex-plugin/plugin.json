@@ -1,0 +1,21 @@
+{
+  "name": "preparing-ui-replica-handoffs",
+  "version": "1.0.0",
+  "description": "中文/English UI 复刻交付包准备与验证技能插件",
+  "author": {
+    "name": "Personal"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "UI 复刻交付准备 / UI Replica Handoff Prep",
+    "shortDescription": "中文/English 高精度 UI 复刻交付准备",
+    "longDescription": "从设计图片生成证据有界、失败关闭的中英双语 UI 实施合同、机器合同与视觉验收基线。",
+    "developerName": "Personal",
+    "category": "Developer Tools",
+    "capabilities": ["Bilingual UI handoff", "Evidence validation"],
+    "defaultPrompt": [
+      "使用 $preparing-ui-replica-handoffs 从这些设计图片生成中英双语 UI 复刻交付包。",
+      "Use $preparing-ui-replica-handoffs to prepare a bilingual UI replica handoff from these design images."
+    ]
+  }
+}

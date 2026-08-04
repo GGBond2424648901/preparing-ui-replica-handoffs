@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UI replica handoff configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "designSourceDir",
+    "outputDir",
+    "designVersion",
+    "locales",
+    "gitScope"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "designSourceDir": { "$ref": "#/$defs/relativePath" },
+    "outputDir": { "$ref": "#/$defs/relativePath" },
+    "designVersion": { "type": "string", "minLength": 1 },
+    "locales": {
+      "type": "array",
+      "items": { "enum": ["zh-CN", "en-US"] },
+      "minItems": 2,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "allOf": [
+        { "contains": { "const": "zh-CN" } },
+        { "contains": { "const": "en-US" } }
+      ]
+    },
+    "targetStack": { "type": ["string", "null"] },
+    "captureProfileId": { "type": ["string", "null"] },
+    "gitScope": { "$ref": "#/$defs/gitScope" }
+  },
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*:)(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "gitScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repositoryRelativeRoot",
+        "allowedNewPaths",
+        "allowedModifiedPaths"
+      ],
+      "properties": {
+        "repositoryRelativeRoot": { "$ref": "#/$defs/relativePath" },
+        "allowedNewPaths": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/relativePath" },
+          "uniqueItems": true
+        },
+        "allowedModifiedPaths": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/relativePath" },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

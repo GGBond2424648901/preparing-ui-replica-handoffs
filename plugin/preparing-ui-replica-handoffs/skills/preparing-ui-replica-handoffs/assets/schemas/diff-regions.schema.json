@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UI visual diff regions",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "pages"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/pageDiff" }
+    }
+  },
+  "$defs": {
+    "qaStatus": { "enum": ["not-run", "pass", "fail", "blocked"] },
+    "bounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "pageDiff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pageId", "stateId", "variantId", "captureProfileId", "regions"],
+      "properties": {
+        "pageId": { "type": "string", "pattern": "^P[0-9]{3,}$" },
+        "stateId": { "type": "string", "pattern": "^S[0-9]{2,}$" },
+        "variantId": { "type": "string", "pattern": "^V[0-9]{2,}$" },
+        "captureProfileId": { "type": "string", "minLength": 1 },
+        "regions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "regionId",
+              "bounds",
+              "comparisonModes",
+              "evidenceTypes",
+              "tolerance",
+              "status"
+            ],
+            "properties": {
+              "regionId": { "type": "string", "minLength": 1 },
+              "bounds": { "$ref": "#/$defs/bounds" },
+              "comparisonModes": {
+                "type": "array",
+                "items": { "enum": ["reference", "current", "overlay", "diff"] },
+                "minItems": 1,
+                "uniqueItems": true
+              },
+              "evidenceTypes": {
+                "type": "array",
+                "items": { "enum": ["visual", "structural", "interaction"] },
+                "minItems": 1,
+                "uniqueItems": true
+              },
+              "tolerance": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["pixelRatio"],
+                "properties": {
+                  "pixelRatio": { "type": "number", "minimum": 0, "maximum": 1 }
+                }
+              },
+              "status": { "$ref": "#/$defs/qaStatus" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

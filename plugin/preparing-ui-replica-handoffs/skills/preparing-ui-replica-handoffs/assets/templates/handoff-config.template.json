@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0.0",
+  "designSourceDir": "design-source",
+  "outputDir": "ui-replica-handoff",
+  "designVersion": "v1",
+  "locales": [
+    "zh-CN",
+    "en-US"
+  ],
+  "gitScope": {
+    "repositoryRelativeRoot": ".",
+    "allowedNewPaths": [
+      "ui-replica-handoff/"
+    ],
+    "allowedModifiedPaths": []
+  }
+}
