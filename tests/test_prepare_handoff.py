@@ -809,6 +809,16 @@ class PrepareHandoffTests(unittest.TestCase):
             self.assertEqual(page["components"], [])
             self.assertEqual(page["interactions"], [])
 
+        with (first_output / "contracts" / "visual-qa-matrix.csv").open(
+            encoding="utf-8", newline=""
+        ) as stream:
+            qa_rows = list(csv.DictReader(stream))
+        self.assertTrue(qa_rows)
+        self.assertTrue(all(row["evidenceRecordPath"] == "" for row in qa_rows))
+        self.assertTrue(
+            all(row["evidenceRecordSha256"] == "" for row in qa_rows)
+        )
+
         schema_contracts = {
             "asset-manifest.schema.json": "asset-manifest.json",
             "page-inventory.schema.json": "page-inventory.json",
@@ -871,6 +881,11 @@ class PrepareHandoffTests(unittest.TestCase):
             [issue["code"] for issue in validation_placeholder["issues"]],
             ["VALIDATION_NOT_RUN"],
         )
+        validation_command = (
+            first_output / "tools" / "validate-command.txt"
+        ).read_text(encoding="utf-8")
+        self.assertIn('--source-root "<SOURCE_ROOT>"', validation_command)
+        self.assertNotIn(str(source), validation_command)
         design_lock = json.loads(
             (first_output / "contracts" / "design-lock.json").read_text(
                 encoding="utf-8"

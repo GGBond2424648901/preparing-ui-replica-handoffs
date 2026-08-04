@@ -5,6 +5,7 @@ import csv
 import hashlib
 import io
 import json
+import math
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -14,6 +15,7 @@ import tempfile
 import types
 
 from jsonschema import Draft202012Validator, FormatChecker
+from PIL import Image, ImageChops, UnidentifiedImageError
 
 
 SCHEMA_VERSION = "1.0.0"
@@ -70,6 +72,8 @@ CSV_FIELDS = {
         "currentPath",
         "overlayPath",
         "diffPath",
+        "evidenceRecordPath",
+        "evidenceRecordSha256",
         "status",
         "notesZh",
         "notesEn",
@@ -94,6 +98,15 @@ REQUIRED_FILES = tuple(
 )
 QA_TYPES = frozenset({"visual", "structural", "interaction"})
 DIFF_MODES = frozenset({"reference", "current", "overlay", "diff"})
+PAGE_SECTION_IDS = frozenset(
+    {
+        "identity-and-evidence",
+        "canvas-shell-regions",
+        "layout-copy-icons-data",
+        "components-interactions-responsive",
+        "qa-and-gaps",
+    }
+)
 SUPPORTED_IMAGE_SUFFIXES = frozenset({".gif", ".jpeg", ".jpg", ".png", ".webp"})
 PLACEHOLDER_VALUES = frozenset(
     {"", "unknown", "unclassified", "tbd", "todo", "n/a", "not-set"}
@@ -441,6 +454,22 @@ def _check_markdown_links(handoff_root: Path, issues: list[dict]) -> None:
         except (OSError, UnicodeError) as error:
             issues.append(_issue("UNREADABLE_MARKDOWN", relative_path, str(error)))
             continue
+        if not text.strip():
+            issues.append(
+                _issue(
+                    "EMPTY_MARKDOWN",
+                    relative_path,
+                    "required Markdown content must not be blank",
+                )
+            )
+        if re.search(r"\{\{[^{}]+\}\}", text):
+            issues.append(
+                _issue(
+                    "UNRESOLVED_MARKDOWN_PLACEHOLDER",
+                    relative_path,
+                    "Markdown contains an unresolved {{...}} placeholder",
+                )
+            )
         for match in LINK_PATTERN.finditer(text):
             target = match.group(1).split("#", 1)[0].split("?", 1)[0]
             if not target:
@@ -518,10 +547,13 @@ def _expected_identities(documents: dict[str, dict]) -> set[tuple[object, object
 
 def _check_page_documents(
     handoff_root: Path,
-    identities: set[tuple[object, object, object]],
+    documents: dict[str, dict],
     issues: list[dict],
 ) -> None:
-    for identity in sorted(identities, key=_identity_text):
+    inventory = documents.get("contracts/page-inventory.json") or {}
+    pages = [page for page in inventory.get("pages", []) if isinstance(page, dict)]
+    for page in sorted(pages, key=lambda item: _identity_text(_identity(item))):
+        identity = _identity(page)
         name_prefix = _identity_text(identity)
         for locale in ("zh", "en"):
             directory = handoff_root / "docs" / locale / "pages"
@@ -535,6 +567,145 @@ def _check_page_documents(
                         identity=name_prefix,
                     )
                 )
+                continue
+            for page_document in matches:
+                relative_path = page_document.relative_to(handoff_root).as_posix()
+                try:
+                    text = page_document.read_text(encoding="utf-8")
+                except (OSError, UnicodeError):
+                    continue
+                present_sections = set(
+                    re.findall(r"(?m)^\s*sectionId:\s*([^\s]+)\s*$", text)
+                )
+                missing_sections = sorted(PAGE_SECTION_IDS - present_sections)
+                if missing_sections:
+                    issues.append(
+                        _issue(
+                            "PAGE_DOCUMENT_SECTION_MISSING",
+                            relative_path,
+                            "page document is missing required section IDs",
+                            identity=name_prefix,
+                            missingSectionIds=missing_sections,
+                        )
+                    )
+                machine_ids = {
+                    str(region.get("regionId"))
+                    for region in page.get("regions", [])
+                    if isinstance(region, dict) and region.get("regionId")
+                }
+                machine_ids.update(
+                    str(component.get("componentId"))
+                    for component in page.get("components", [])
+                    if isinstance(component, dict) and component.get("componentId")
+                )
+                machine_ids.update(
+                    str(interaction.get("interactionId"))
+                    for interaction in page.get("interactions", [])
+                    if isinstance(interaction, dict) and interaction.get("interactionId")
+                )
+                missing_ids = sorted(
+                    identifier for identifier in machine_ids if identifier not in text
+                )
+                if missing_ids:
+                    issues.append(
+                        _issue(
+                            "PAGE_DOCUMENT_REFERENCE_MISSING",
+                            relative_path,
+                            "page document does not mention every machine contract ID",
+                            identity=name_prefix,
+                            missingIds=missing_ids,
+                        )
+                    )
+
+
+def _check_semantic_readiness(
+    documents: dict[str, dict],
+    gap_rows: list[dict] | None,
+    issues: list[dict],
+) -> None:
+    inventory = documents.get("contracts/page-inventory.json") or {}
+    registry = documents.get("contracts/component-registry.json") or {}
+    pages = [page for page in inventory.get("pages", []) if isinstance(page, dict)]
+    registered_components = {
+        component.get("componentId")
+        for component in registry.get("components", [])
+        if isinstance(component, dict) and component.get("componentId")
+    }
+    gap_registry = {
+        row.get("gapId"): row
+        for row in (gap_rows or [])
+        if isinstance(row, dict) and row.get("gapId")
+    }
+    component_instances = [
+        component
+        for page in pages
+        for component in page.get("components", [])
+        if isinstance(component, dict)
+    ]
+    if component_instances and not registered_components:
+        issues.append(
+            _issue(
+                "COMPONENT_REGISTRY_EMPTY",
+                "contracts/component-registry.json",
+                "component registry must be nonempty when page instances exist",
+            )
+        )
+    for page in pages:
+        identity_name = _identity_text(_identity(page))
+        for component in page.get("components", []):
+            if not isinstance(component, dict):
+                continue
+            component_id = component.get("componentId")
+            if component_id not in registered_components:
+                issues.append(
+                    _issue(
+                        "COMPONENT_ID_NOT_FOUND",
+                        "contracts/page-inventory.json",
+                        f"page component does not resolve in registry: {component_id}",
+                        identity=identity_name,
+                        componentId=component_id,
+                    )
+                )
+        if page.get("status") != "approved":
+            continue
+        for field in (
+            "layoutRelationships",
+            "copy",
+            "components",
+            "data",
+            "interactions",
+        ):
+            if page.get(field):
+                continue
+            issues.append(
+                _issue(
+                    "APPROVED_PAGE_SUBSTANTIVE_FIELD_EMPTY",
+                    "contracts/page-inventory.json",
+                    f"approved page has an empty substantive field: {field}",
+                    identity=identity_name,
+                    field=field,
+                )
+            )
+        if page.get("icons"):
+            continue
+        absence_marker = "[absence:icons]"
+        has_resolved_absence = any(
+            str(gap_registry.get(gap_id, {}).get("status", "")).lower()
+            in RESOLVED_GAP_STATUSES
+            and absence_marker
+            in str(gap_registry.get(gap_id, {}).get("resolution", "")).lower()
+            for gap_id in page.get("gapIds", [])
+        )
+        if not has_resolved_absence:
+            issues.append(
+                _issue(
+                    "APPROVED_PAGE_SUBSTANTIVE_FIELD_EMPTY",
+                    "contracts/page-inventory.json",
+                    "approved page has no icons and no resolved [absence:icons] gap",
+                    identity=identity_name,
+                    field="icons",
+                )
+            )
 
 
 def _load_parity_checker():
@@ -637,6 +808,439 @@ def _check_implementation_coverage(
                 f"implementation mapping is missing for {_identity_text(identity)}",
             )
         )
+
+
+def _load_qa_image(path: Path) -> Image.Image:
+    with Image.open(path) as image:
+        image.load()
+        return image.convert("RGBA")
+
+
+def _check_qa_evidence_records(
+    handoff_root: Path,
+    documents: dict[str, dict],
+    qa_rows: list[dict] | None,
+    requirement_rows: list[dict] | None,
+    issues: list[dict],
+) -> None:
+    inventory = documents.get("contracts/page-inventory.json") or {}
+    diff_contract = documents.get("contracts/diff-regions.json") or {}
+    registry = documents.get("contracts/component-registry.json") or {}
+    pages = {
+        _identity(page): page
+        for page in inventory.get("pages", [])
+        if isinstance(page, dict)
+    }
+    diff_pages = {
+        _identity(page): page
+        for page in diff_contract.get("pages", [])
+        if isinstance(page, dict)
+    }
+    registry_ids = {
+        component.get("componentId")
+        for component in registry.get("components", [])
+        if isinstance(component, dict) and component.get("componentId")
+    }
+    requirement_ids_by_identity: dict[tuple[object, object, object], set[object]] = {}
+    for requirement in requirement_rows or []:
+        if not isinstance(requirement, dict):
+            continue
+        requirement_ids_by_identity.setdefault(_identity(requirement), set()).add(
+            requirement.get("requirementId")
+        )
+
+    for row in qa_rows or []:
+        if row.get("status") != "pass":
+            continue
+        qa_id = row.get("qaId")
+        record_relative = row.get("evidenceRecordPath", "")
+        expected_record_hash = row.get("evidenceRecordSha256", "")
+        if not record_relative or not expected_record_hash:
+            issues.append(
+                _issue(
+                    "QA_EVIDENCE_RECORD_REQUIRED",
+                    "contracts/visual-qa-matrix.csv",
+                    "passed QA row requires an evidence record path and SHA-256",
+                    qaId=qa_id,
+                )
+            )
+            continue
+        if not _safe_relative_path(record_relative):
+            issues.append(
+                _issue(
+                    "QA_EVIDENCE_RECORD_PATH_UNSAFE",
+                    "contracts/visual-qa-matrix.csv",
+                    f"evidence record path must be package-relative: {record_relative}",
+                    qaId=qa_id,
+                )
+            )
+            continue
+        record_path = _resolve_within(handoff_root, record_relative)
+        if record_path is None or not record_path.is_file():
+            issues.append(
+                _issue(
+                    "QA_EVIDENCE_RECORD_MISSING",
+                    record_relative,
+                    "passed QA evidence record is missing",
+                    qaId=qa_id,
+                )
+            )
+            continue
+        actual_record_hash = _sha256(record_path)
+        if actual_record_hash != expected_record_hash:
+            issues.append(
+                _issue(
+                    "QA_EVIDENCE_RECORD_HASH_MISMATCH",
+                    record_relative,
+                    "evidence record SHA-256 differs from the QA matrix",
+                    qaId=qa_id,
+                )
+            )
+        try:
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            issues.append(
+                _issue(
+                    "QA_EVIDENCE_RECORD_INVALID_JSON",
+                    record_relative,
+                    str(error),
+                    qaId=qa_id,
+                )
+            )
+            continue
+        if not isinstance(record, dict):
+            issues.append(
+                _issue(
+                    "QA_EVIDENCE_RECORD_INVALID_JSON",
+                    record_relative,
+                    "evidence record root must be an object",
+                    qaId=qa_id,
+                )
+            )
+            continue
+
+        expected_fields = {
+            field: row.get(field)
+            for field in (
+                "qaId",
+                "pageId",
+                "stateId",
+                "variantId",
+                "evidenceType",
+                "status",
+            )
+        }
+        mismatches = {
+            field: {"expected": expected, "actual": record.get(field)}
+            for field, expected in expected_fields.items()
+            if record.get(field) != expected
+        }
+        for field in ("tool", "command"):
+            if not isinstance(record.get(field), str) or not record[field].strip():
+                mismatches[field] = {"expected": "nonempty string", "actual": record.get(field)}
+        if mismatches:
+            issues.append(
+                _issue(
+                    "QA_EVIDENCE_RECORD_FIELD_MISMATCH",
+                    record_relative,
+                    "evidence record identity, status, tool, or command is invalid",
+                    qaId=qa_id,
+                    mismatches=mismatches,
+                )
+            )
+
+        checks = record.get("checks")
+        if not isinstance(checks, list) or not checks:
+            issues.append(
+                _issue(
+                    "QA_EVIDENCE_CHECKS_REQUIRED",
+                    record_relative,
+                    "evidence record checks must be a nonempty array",
+                    qaId=qa_id,
+                )
+            )
+            checks = []
+        for index, check in enumerate(checks):
+            if not isinstance(check, dict) or check.get("status") != "pass":
+                issues.append(
+                    _issue(
+                        "QA_EVIDENCE_CHECK_NOT_PASSED",
+                        f"{record_relative}#/checks/{index}",
+                        "every evidence check must be an object with status pass",
+                        qaId=qa_id,
+                    )
+                )
+
+        artifacts = record.get("artifacts")
+        if not isinstance(artifacts, dict):
+            artifacts = {}
+        artifact_paths: dict[str, Path] = {}
+        for name, csv_field in (
+            ("reference", "referencePath"),
+            ("current", "currentPath"),
+            ("overlay", "overlayPath"),
+            ("diff", "diffPath"),
+        ):
+            artifact = artifacts.get(name)
+            csv_path = row.get(csv_field)
+            if not isinstance(artifact, dict):
+                issues.append(
+                    _issue(
+                        "QA_ARTIFACT_RECORD_INVALID",
+                        record_relative,
+                        f"evidence record is missing artifact metadata: {name}",
+                        qaId=qa_id,
+                    )
+                )
+                continue
+            artifact_relative = artifact.get("path")
+            if artifact_relative != csv_path or not _safe_relative_path(artifact_relative):
+                issues.append(
+                    _issue(
+                        "QA_ARTIFACT_PATH_MISMATCH",
+                        record_relative,
+                        f"artifact path is unsafe or differs from QA matrix: {name}",
+                        qaId=qa_id,
+                    )
+                )
+                continue
+            artifact_path = _resolve_within(handoff_root, artifact_relative)
+            if artifact_path is None or not artifact_path.is_file():
+                issues.append(
+                    _issue(
+                        "QA_ARTIFACT_MISSING",
+                        artifact_relative,
+                        f"QA artifact is missing: {name}",
+                        qaId=qa_id,
+                    )
+                )
+                continue
+            artifact_paths[name] = artifact_path
+            if artifact.get("sha256") != _sha256(artifact_path):
+                issues.append(
+                    _issue(
+                        "QA_ARTIFACT_HASH_MISMATCH",
+                        artifact_relative,
+                        f"QA artifact SHA-256 is invalid: {name}",
+                        qaId=qa_id,
+                    )
+                )
+
+        images: dict[str, Image.Image] = {}
+        for name, artifact_path in artifact_paths.items():
+            try:
+                images[name] = _load_qa_image(artifact_path)
+            except (OSError, ValueError, UnidentifiedImageError) as error:
+                issues.append(
+                    _issue(
+                        "QA_IMAGE_DECODE_FAILED",
+                        artifact_path.relative_to(handoff_root).as_posix(),
+                        f"could not decode QA image {name}: {error}",
+                        qaId=qa_id,
+                    )
+                )
+        if len(images) == 4:
+            dimensions = {image.size for image in images.values()}
+            if len(dimensions) != 1:
+                issues.append(
+                    _issue(
+                        "QA_IMAGE_DIMENSION_MISMATCH",
+                        record_relative,
+                        "reference/current/overlay/diff dimensions must match",
+                        qaId=qa_id,
+                    )
+                )
+            elif row.get("evidenceType") == "visual":
+                expected_overlay = Image.blend(
+                    images["reference"], images["current"], 0.5
+                )
+                expected_diff = ImageChops.difference(
+                    images["reference"], images["current"]
+                )
+                if expected_overlay.tobytes() != images["overlay"].tobytes():
+                    issues.append(
+                        _issue(
+                            "QA_OVERLAY_PIXEL_MISMATCH",
+                            row.get("overlayPath", ""),
+                            "overlay pixels are not the 50% reference/current blend",
+                            qaId=qa_id,
+                        )
+                    )
+                if expected_diff.tobytes() != images["diff"].tobytes():
+                    issues.append(
+                        _issue(
+                            "QA_DIFF_PIXEL_MISMATCH",
+                            row.get("diffPath", ""),
+                            "diff pixels do not equal ImageChops.difference(reference, current)",
+                            qaId=qa_id,
+                        )
+                    )
+                different_pixels = sum(
+                    1
+                    for pixel in expected_diff.get_flattened_data()
+                    if any(pixel)
+                )
+                actual_pixel_ratio = different_pixels / (
+                    expected_diff.width * expected_diff.height
+                )
+                pixel_checks = [
+                    check
+                    for check in checks
+                    if isinstance(check, dict)
+                    and check.get("checkType") == "pixel-diff"
+                ]
+                if not pixel_checks:
+                    issues.append(
+                        _issue(
+                            "QA_VISUAL_PIXEL_CHECK_REQUIRED",
+                            record_relative,
+                            "visual evidence requires a pixel-diff check",
+                            qaId=qa_id,
+                        )
+                    )
+                elif not any(
+                    isinstance(check.get("actualPixelRatio"), (int, float))
+                    and math.isclose(
+                        float(check["actualPixelRatio"]),
+                        actual_pixel_ratio,
+                        rel_tol=0.0,
+                        abs_tol=1e-12,
+                    )
+                    for check in pixel_checks
+                ):
+                    issues.append(
+                        _issue(
+                            "QA_PIXEL_RATIO_MISMATCH",
+                            record_relative,
+                            "recorded actualPixelRatio differs from computed pixels",
+                            qaId=qa_id,
+                            computedPixelRatio=actual_pixel_ratio,
+                        )
+                    )
+                diff_page = diff_pages.get(_identity(row)) or {}
+                region = next(
+                    (
+                        item
+                        for item in diff_page.get("regions", [])
+                        if isinstance(item, dict)
+                        and item.get("regionId") == row.get("regionId")
+                    ),
+                    None,
+                )
+                tolerance = (
+                    region.get("tolerance", {}).get("pixelRatio")
+                    if isinstance(region, dict)
+                    else None
+                )
+                if not isinstance(tolerance, (int, float)):
+                    issues.append(
+                        _issue(
+                            "QA_PIXEL_TOLERANCE_REQUIRED",
+                            "contracts/diff-regions.json",
+                            "visual QA region requires numeric tolerance.pixelRatio",
+                            qaId=qa_id,
+                        )
+                    )
+                elif actual_pixel_ratio > float(tolerance):
+                    issues.append(
+                        _issue(
+                            "QA_PIXEL_RATIO_EXCEEDS_TOLERANCE",
+                            record_relative,
+                            "computed pixel ratio exceeds region tolerance",
+                            qaId=qa_id,
+                            actualPixelRatio=actual_pixel_ratio,
+                            tolerancePixelRatio=float(tolerance),
+                        )
+                    )
+
+        identity = _identity(row)
+        page = pages.get(identity) or {}
+        if row.get("evidenceType") == "structural":
+            checks_by_type = {
+                check.get("checkType"): check
+                for check in checks
+                if isinstance(check, dict)
+            }
+            required_types = {"requirement-map", "region-map", "component-map"}
+            if not required_types.issubset(checks_by_type):
+                issues.append(
+                    _issue(
+                        "QA_STRUCTURAL_CHECK_COVERAGE_MISSING",
+                        record_relative,
+                        "structural evidence requires requirement, region, and component mappings",
+                        qaId=qa_id,
+                    )
+                )
+            requirement_check = checks_by_type.get("requirement-map", {})
+            if requirement_check.get("requirementId") not in requirement_ids_by_identity.get(identity, set()):
+                issues.append(
+                    _issue(
+                        "QA_STRUCTURAL_REQUIREMENT_NOT_FOUND",
+                        record_relative,
+                        "structural requirementId does not resolve for the target",
+                        qaId=qa_id,
+                    )
+                )
+            page_region_ids = {
+                region.get("regionId")
+                for region in page.get("regions", [])
+                if isinstance(region, dict)
+            }
+            if checks_by_type.get("region-map", {}).get("regionId") not in page_region_ids:
+                issues.append(
+                    _issue(
+                        "QA_STRUCTURAL_REGION_NOT_FOUND",
+                        record_relative,
+                        "structural regionId does not resolve for the target",
+                        qaId=qa_id,
+                    )
+                )
+            page_component_ids = {
+                component.get("componentId")
+                for component in page.get("components", [])
+                if isinstance(component, dict)
+            }
+            component_id = checks_by_type.get("component-map", {}).get("componentId")
+            if component_id not in page_component_ids or component_id not in registry_ids:
+                issues.append(
+                    _issue(
+                        "QA_STRUCTURAL_COMPONENT_NOT_FOUND",
+                        record_relative,
+                        "structural componentId must resolve in both page and registry",
+                        qaId=qa_id,
+                    )
+                )
+        elif row.get("evidenceType") == "interaction":
+            interaction_checks = [
+                check
+                for check in checks
+                if isinstance(check, dict)
+                and check.get("checkType") == "interaction-case"
+            ]
+            page_interaction_ids = {
+                interaction.get("interactionId")
+                for interaction in page.get("interactions", [])
+                if isinstance(interaction, dict)
+            }
+            if not interaction_checks:
+                issues.append(
+                    _issue(
+                        "QA_INTERACTION_CHECK_REQUIRED",
+                        record_relative,
+                        "interaction evidence requires at least one interaction-case check",
+                        qaId=qa_id,
+                    )
+                )
+            for check in interaction_checks:
+                if check.get("interactionId") not in page_interaction_ids:
+                    issues.append(
+                        _issue(
+                            "QA_INTERACTION_NOT_FOUND",
+                            record_relative,
+                            "interactionId does not resolve for the target page",
+                            qaId=qa_id,
+                        )
+                    )
 
 
 def _check_diff_and_qa(
@@ -1205,6 +1809,15 @@ def validate_handoff(
     checks = {"git": {"status": "skipped", "reason": "not-run", "stagedPaths": []}}
     design_lock = {"computedContractsHash": None, "computedFileCount": 0}
 
+    if source_root is None:
+        issues.append(
+            _issue(
+                "SOURCE_VERIFICATION_REQUIRED",
+                "contracts/asset-manifest.json",
+                "source_root is required to verify source integrity and readiness",
+            )
+        )
+
     if not handoff_root.is_dir():
         issues.append(
             _issue("HANDOFF_ROOT_MISSING", ".", "handoff root does not exist or is not a directory")
@@ -1255,11 +1868,19 @@ def validate_handoff(
             _check_qa_paths(handoff_root, qa_rows, issues)
             identities = _expected_identities(documents)
             _check_implementation_coverage(documents, identities, issues)
-            _check_page_documents(handoff_root, identities, issues)
+            _check_page_documents(handoff_root, documents, issues)
             _check_bilingual(handoff_root, issues)
             _check_capture_profiles(documents, issues)
             _check_diff_and_qa(documents, qa_rows, identities, issues)
+            _check_qa_evidence_records(
+                handoff_root,
+                documents,
+                qa_rows,
+                csv_documents.get("contracts/requirement-ledger.csv"),
+                issues,
+            )
             gap_rows = csv_documents.get("contracts/gap-register.csv")
+            _check_semantic_readiness(documents, gap_rows, issues)
             _check_gap_integrity(
                 documents,
                 gap_rows,

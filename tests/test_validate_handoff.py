@@ -11,7 +11,7 @@ import types
 import unittest
 from unittest import mock
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -127,10 +127,99 @@ def _refresh_design_lock(handoff):
     _write_json(lock_path, lock)
 
 
+def _write_passing_qa_evidence(handoff, row, page, requirement_id):
+    qa_root = f"reports/qa/{row['qaId']}"
+    artifact_paths = {
+        "reference": f"{qa_root}/reference.png",
+        "current": f"{qa_root}/current.png",
+        "overlay": f"{qa_root}/overlay.png",
+        "diff": f"{qa_root}/diff.png",
+    }
+    source_reference = Image.open(handoff / row["referencePath"]).convert("RGBA")
+    images = {
+        "reference": source_reference,
+        "current": source_reference.copy(),
+    }
+    images["overlay"] = Image.blend(images["reference"], images["current"], 0.5)
+    images["diff"] = ImageChops.difference(
+        images["reference"], images["current"]
+    )
+    for name, image in images.items():
+        target = handoff / artifact_paths[name]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        image.save(target, format="PNG")
+
+    if row["evidenceType"] == "visual":
+        checks = [
+            {
+                "checkType": "pixel-diff",
+                "status": "pass",
+                "actualPixelRatio": 0.0,
+            }
+        ]
+    elif row["evidenceType"] == "structural":
+        checks = [
+            {
+                "checkType": "requirement-map",
+                "status": "pass",
+                "requirementId": requirement_id,
+            },
+            {
+                "checkType": "region-map",
+                "status": "pass",
+                "regionId": page["regions"][0]["regionId"],
+            },
+            {
+                "checkType": "component-map",
+                "status": "pass",
+                "componentId": page["components"][0]["componentId"],
+            },
+        ]
+    else:
+        checks = [
+            {
+                "checkType": "interaction-case",
+                "status": "pass",
+                "interactionId": page["interactions"][0]["interactionId"],
+            }
+        ]
+
+    record = {
+        "qaId": row["qaId"],
+        "pageId": row["pageId"],
+        "stateId": row["stateId"],
+        "variantId": row["variantId"],
+        "evidenceType": row["evidenceType"],
+        "status": "pass",
+        "tool": "fixture-evidence-runner",
+        "command": "python -m unittest tests.test_validate_handoff",
+        "checks": checks,
+        "artifacts": {
+            name: {"path": path, "sha256": _sha256(handoff / path)}
+            for name, path in artifact_paths.items()
+        },
+    }
+    evidence_path = f"{qa_root}/evidence.json"
+    _write_json(handoff / evidence_path, record)
+    row.update(
+        {
+            "referencePath": artifact_paths["reference"],
+            "currentPath": artifact_paths["current"],
+            "overlayPath": artifact_paths["overlay"],
+            "diffPath": artifact_paths["diff"],
+            "evidenceRecordPath": evidence_path,
+            "evidenceRecordSha256": _sha256(handoff / evidence_path),
+            "status": "pass",
+        }
+    )
+
+
 def _resolve_generated_skeleton(handoff):
     page_inventory_path = handoff / "contracts" / "page-inventory.json"
     page_inventory = _read_json(page_inventory_path)
     for number, page in enumerate(page_inventory["pages"], start=1):
+        component_id = f"component-{page['pageId']}-card"
+        interaction_id = f"interaction-{page['pageId']}-open"
         page["route"].update(
             {"path": f"/page-{number}", "evidenceLevel": "direct", "gapId": None}
         )
@@ -141,8 +230,120 @@ def _resolve_generated_skeleton(handoff):
             region.update({"role": "content", "evidenceLevel": "direct", "gapIds": []})
         for criterion in page["acceptanceCriteria"]:
             criterion["status"] = "pass"
-        page.update({"status": "approved", "gapIds": []})
+        page.update(
+            {
+                "layoutRelationships": [
+                    {
+                        "relationshipId": f"layout-{page['pageId']}",
+                        "containerId": "region-canvas",
+                        "display": "block",
+                        "relation": "contains",
+                        "targetIds": [component_id],
+                        "ratio": None,
+                        "gap": 0,
+                        "minSize": 0,
+                        "overflow": "visible",
+                        "evidenceLevel": "approved",
+                        "gapIds": [],
+                    }
+                ],
+                "copy": [
+                    {
+                        "copyId": f"copy-{page['pageId']}-title",
+                        "text": {"zh-CN": "示例标题", "en-US": "Sample title"},
+                        "classification": "verified",
+                        "evidenceLevel": "approved",
+                        "sourceBounds": {"x": 0, "y": 0, "width": 8, "height": 6},
+                        "gapId": None,
+                    }
+                ],
+                "icons": [
+                    {
+                        "iconId": f"icon-{page['pageId']}-sample",
+                        "assetId": page["sourceAssetIds"][0],
+                        "meaning": {"zh-CN": "示例图标", "en-US": "Sample icon"},
+                        "evidenceLevel": "approved",
+                        "gapId": None,
+                    }
+                ],
+                "components": [
+                    {
+                        "instanceId": f"instance-{page['pageId']}-card",
+                        "componentId": component_id,
+                        "regionId": "region-canvas",
+                        "evidenceLevel": "approved",
+                        "gapId": None,
+                    }
+                ],
+                "data": [
+                    {
+                        "dataId": f"data-{page['pageId']}-sample",
+                        "classification": "verified",
+                        "valueShape": "localized-title",
+                        "sourceRef": page["sourceAssetIds"][0],
+                        "evidenceLevel": "approved",
+                        "gapId": None,
+                    }
+                ],
+                "interactions": [
+                    {
+                        "interactionId": interaction_id,
+                        "trigger": "click",
+                        "outcome": {"zh-CN": "打开详情", "en-US": "Open details"},
+                        "status": "approved",
+                        "evidenceLevel": "approved",
+                        "gapId": None,
+                    }
+                ],
+                "status": "approved",
+                "gapIds": [],
+            }
+        )
     _write_json(page_inventory_path, page_inventory)
+
+    registry_path = handoff / "contracts" / "component-registry.json"
+    registry = _read_json(registry_path)
+    registry["components"] = [
+        {
+            "componentId": f"component-{page['pageId']}-card",
+            "name": {"zh-CN": "示例卡片", "en-US": "Sample card"},
+            "status": "approved",
+            "evidenceLevel": "approved",
+            "sourcePageIdentities": [
+                {
+                    "pageId": page["pageId"],
+                    "stateId": page["stateId"],
+                    "variantId": page["variantId"],
+                }
+            ],
+            "anatomy": ["root"],
+            "variants": [],
+            "states": [],
+            "props": [],
+            "interactions": [],
+            "styleTokenRefs": [],
+            "gapIds": [],
+        }
+        for page in page_inventory["pages"]
+    ]
+    _write_json(registry_path, registry)
+
+    for page in page_inventory["pages"]:
+        identity = f"{page['pageId']}-{page['stateId']}-{page['variantId']}"
+        identifiers = [
+            *(region["regionId"] for region in page["regions"]),
+            *(component["componentId"] for component in page["components"]),
+            *(interaction["interactionId"] for interaction in page["interactions"]),
+        ]
+        for locale in ("zh", "en"):
+            path = next((handoff / "docs" / locale / "pages").glob(f"{identity}-*.md"))
+            path.write_text(
+                path.read_text(encoding="utf-8")
+                + "\n\nMachine contract IDs: "
+                + ", ".join(f"`{identifier}`" for identifier in identifiers)
+                + "\n",
+                encoding="utf-8",
+            )
 
     style_path = handoff / "contracts" / "ui-style-contract.json"
     style = _read_json(style_path)
@@ -203,19 +404,18 @@ def _resolve_generated_skeleton(handoff):
 
     qa_path = handoff / "contracts" / "visual-qa-matrix.csv"
     qa_rows = _read_csv(qa_path)
-    for row_number, row in enumerate(qa_rows, start=1):
-        paths = {}
-        for artifact_number, field in enumerate(
-            ("referencePath", "currentPath", "overlayPath", "diffPath"), start=1
-        ):
-            relative_path = f"reports/qa/{row['qaId']}/{field[:-4]}.png"
-            _write_image(
-                handoff / relative_path,
-                size=(16 + row_number, 12 + artifact_number),
-                color=(row_number * 20 % 255, artifact_number * 40, 100),
-            )
-            paths[field] = relative_path
-        row.update({**paths, "status": "pass"})
+    requirements = {
+        row["pageId"]: row["requirementId"]
+        for row in _read_csv(handoff / "contracts" / "requirement-ledger.csv")
+    }
+    pages = {page["pageId"]: page for page in page_inventory["pages"]}
+    for row in qa_rows:
+        _write_passing_qa_evidence(
+            handoff,
+            row,
+            pages[row["pageId"]],
+            requirements[row["pageId"]],
+        )
     _write_csv(qa_path, qa_rows, list(qa_rows[0]))
 
     gap_path = handoff / "contracts" / "gap-register.csv"
@@ -259,6 +459,100 @@ class ValidateHandoffTests(unittest.TestCase):
         self.assertEqual(result["designLock"]["computedFileCount"], len(lock["files"]))
         persisted = _read_json(self.handoff / "reports" / "validation-report.json")
         self.assertEqual(persisted, result)
+
+    def test_source_verification_is_required_for_readiness(self):
+        result = self.validate()
+
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("SOURCE_VERIFICATION_REQUIRED", self.codes(result))
+
+    def test_reports_blank_markdown_and_unresolved_template_placeholder(self):
+        readme = self.handoff / "README.md"
+        readme.write_text("   \n", encoding="utf-8")
+        page = next((self.handoff / "docs" / "en" / "pages").glob("*.md"))
+        page.write_text(
+            page.read_text(encoding="utf-8") + "\n{{unresolved-copy}}\n",
+            encoding="utf-8",
+        )
+        _refresh_design_lock(self.handoff)
+
+        codes = self.codes(self.validate(source_root=self.source))
+
+        self.assertIn("EMPTY_MARKDOWN", codes)
+        self.assertIn("UNRESOLVED_MARKDOWN_PLACEHOLDER", codes)
+
+    def test_reports_missing_page_section_and_machine_identifier(self):
+        page = next((self.handoff / "docs" / "en" / "pages").glob("*.md"))
+        text = page.read_text(encoding="utf-8")
+        text = text.replace("sectionId: qa-and-gaps", "sectionId: removed")
+        text = text.replace("component-P001-card", "component-omitted")
+        page.write_text(text, encoding="utf-8")
+        _refresh_design_lock(self.handoff)
+
+        codes = self.codes(self.validate(source_root=self.source))
+
+        self.assertIn("PAGE_DOCUMENT_SECTION_MISSING", codes)
+        self.assertIn("PAGE_DOCUMENT_REFERENCE_MISSING", codes)
+
+    def test_reports_approved_page_with_empty_substantive_contract(self):
+        path = self.handoff / "contracts" / "page-inventory.json"
+        inventory = _read_json(path)
+        for field in (
+            "layoutRelationships",
+            "copy",
+            "components",
+            "data",
+            "interactions",
+        ):
+            inventory["pages"][0][field] = []
+        _write_json(path, inventory)
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "APPROVED_PAGE_SUBSTANTIVE_FIELD_EMPTY",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_reports_approved_page_without_icons_or_resolved_absence_gap(self):
+        path = self.handoff / "contracts" / "page-inventory.json"
+        inventory = _read_json(path)
+        inventory["pages"][0]["icons"] = []
+        _write_json(path, inventory)
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "APPROVED_PAGE_SUBSTANTIVE_FIELD_EMPTY",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_allows_empty_icons_with_resolved_explicit_absence_gap(self):
+        inventory_path = self.handoff / "contracts" / "page-inventory.json"
+        inventory = _read_json(inventory_path)
+        inventory["pages"][0]["icons"] = []
+        inventory["pages"][0]["gapIds"] = ["G001"]
+        _write_json(inventory_path, inventory)
+        gap_path = self.handoff / "contracts" / "gap-register.csv"
+        gaps = _read_csv(gap_path)
+        gaps[0]["status"] = "resolved"
+        gaps[0]["resolution"] = "Reviewed visual evidence [absence:icons]"
+        _write_csv(gap_path, gaps, list(gaps[0]))
+        _refresh_design_lock(self.handoff)
+
+        result = self.validate(source_root=self.source)
+
+        self.assertEqual(result["status"], "passed", result["issues"])
+
+    def test_reports_unresolved_page_component_and_empty_registry(self):
+        registry_path = self.handoff / "contracts" / "component-registry.json"
+        registry = _read_json(registry_path)
+        registry["components"] = []
+        _write_json(registry_path, registry)
+        _refresh_design_lock(self.handoff)
+
+        codes = self.codes(self.validate(source_root=self.source))
+
+        self.assertIn("COMPONENT_REGISTRY_EMPTY", codes)
+        self.assertIn("COMPONENT_ID_NOT_FOUND", codes)
 
     def test_completed_package_report_rerun_is_stable(self):
         first = self.validate(source_root=self.source)
@@ -482,15 +776,268 @@ class ValidateHandoffTests(unittest.TestCase):
     def test_allows_distinct_qa_paths_with_identical_content_hashes(self):
         path = self.handoff / "contracts" / "visual-qa-matrix.csv"
         rows = _read_csv(path)
-        source_bytes = (self.handoff / rows[0]["referencePath"]).read_bytes()
-        for field in ("currentPath", "overlayPath", "diffPath"):
-            (self.handoff / rows[0][field]).write_bytes(source_bytes)
-        _refresh_design_lock(self.handoff)
+        visual = next(row for row in rows if row["evidenceType"] == "visual")
+        repeated_hashes = {
+            _sha256(self.handoff / visual[field])
+            for field in ("referencePath", "currentPath", "overlayPath")
+        }
 
         result = self.validate(source_root=self.source)
 
+        self.assertEqual(len(repeated_hashes), 1)
         self.assertEqual(result["status"], "passed")
         self.assertNotIn("QA_EVIDENCE_HASH_REUSED", self.codes(result))
+
+    def test_passed_qa_row_requires_hashed_evidence_record(self):
+        path = self.handoff / "contracts" / "visual-qa-matrix.csv"
+        rows = _read_csv(path)
+        rows[0]["evidenceRecordPath"] = ""
+        rows[0]["evidenceRecordSha256"] = ""
+        _write_csv(path, rows, list(rows[0]))
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "QA_EVIDENCE_RECORD_REQUIRED",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_reports_unsafe_qa_evidence_record_path(self):
+        path = self.handoff / "contracts" / "visual-qa-matrix.csv"
+        rows = _read_csv(path)
+        rows[0]["evidenceRecordPath"] = "../outside.json"
+        _write_csv(path, rows, list(rows[0]))
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "QA_EVIDENCE_RECORD_PATH_UNSAFE",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_reports_qa_evidence_record_hash_mismatch(self):
+        path = self.handoff / "contracts" / "visual-qa-matrix.csv"
+        rows = _read_csv(path)
+        rows[0]["evidenceRecordSha256"] = "0" * 64
+        _write_csv(path, rows, list(rows[0]))
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "QA_EVIDENCE_RECORD_HASH_MISMATCH",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_reports_malformed_qa_evidence_record(self):
+        path = self.handoff / "contracts" / "visual-qa-matrix.csv"
+        rows = _read_csv(path)
+        record_path = self.handoff / rows[0]["evidenceRecordPath"]
+        record_path.write_text("{not-json", encoding="utf-8")
+        rows[0]["evidenceRecordSha256"] = _sha256(record_path)
+        _write_csv(path, rows, list(rows[0]))
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "QA_EVIDENCE_RECORD_INVALID_JSON",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_reports_qa_evidence_record_identity_mismatch(self):
+        path = self.handoff / "contracts" / "visual-qa-matrix.csv"
+        rows = _read_csv(path)
+        record_path = self.handoff / rows[0]["evidenceRecordPath"]
+        record = _read_json(record_path)
+        record["qaId"] = "QA999"
+        _write_json(record_path, record)
+        rows[0]["evidenceRecordSha256"] = _sha256(record_path)
+        _write_csv(path, rows, list(rows[0]))
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "QA_EVIDENCE_RECORD_FIELD_MISMATCH",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_reports_qa_evidence_record_with_nonpassing_check(self):
+        path = self.handoff / "contracts" / "visual-qa-matrix.csv"
+        rows = _read_csv(path)
+        record_path = self.handoff / rows[0]["evidenceRecordPath"]
+        record = _read_json(record_path)
+        record["checks"][0]["status"] = "fail"
+        _write_json(record_path, record)
+        rows[0]["evidenceRecordSha256"] = _sha256(record_path)
+        _write_csv(path, rows, list(rows[0]))
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "QA_EVIDENCE_CHECK_NOT_PASSED",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_reports_qa_artifact_hash_mismatch(self):
+        path = self.handoff / "contracts" / "visual-qa-matrix.csv"
+        rows = _read_csv(path)
+        record_path = self.handoff / rows[0]["evidenceRecordPath"]
+        record = _read_json(record_path)
+        record["artifacts"]["reference"]["sha256"] = "0" * 64
+        _write_json(record_path, record)
+        rows[0]["evidenceRecordSha256"] = _sha256(record_path)
+        _write_csv(path, rows, list(rows[0]))
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "QA_ARTIFACT_HASH_MISMATCH",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_reports_fabricated_overlay_pixels(self):
+        path = self.handoff / "contracts" / "visual-qa-matrix.csv"
+        rows = _read_csv(path)
+        visual = next(row for row in rows if row["evidenceType"] == "visual")
+        _write_image(self.handoff / visual["overlayPath"], size=(18, 12), color="red")
+        record_path = self.handoff / visual["evidenceRecordPath"]
+        record = _read_json(record_path)
+        record["artifacts"]["overlay"]["sha256"] = _sha256(
+            self.handoff / visual["overlayPath"]
+        )
+        _write_json(record_path, record)
+        visual["evidenceRecordSha256"] = _sha256(record_path)
+        _write_csv(path, rows, list(rows[0]))
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "QA_OVERLAY_PIXEL_MISMATCH",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_reports_fabricated_diff_pixels(self):
+        path = self.handoff / "contracts" / "visual-qa-matrix.csv"
+        rows = _read_csv(path)
+        visual = next(row for row in rows if row["evidenceType"] == "visual")
+        _write_image(self.handoff / visual["diffPath"], size=(18, 12), color="white")
+        record_path = self.handoff / visual["evidenceRecordPath"]
+        record = _read_json(record_path)
+        record["artifacts"]["diff"]["sha256"] = _sha256(
+            self.handoff / visual["diffPath"]
+        )
+        _write_json(record_path, record)
+        visual["evidenceRecordSha256"] = _sha256(record_path)
+        _write_csv(path, rows, list(rows[0]))
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "QA_DIFF_PIXEL_MISMATCH",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_reports_mismatched_qa_image_dimensions(self):
+        path = self.handoff / "contracts" / "visual-qa-matrix.csv"
+        rows = _read_csv(path)
+        visual = next(row for row in rows if row["evidenceType"] == "visual")
+        _write_image(self.handoff / visual["diffPath"], size=(9, 6), color="black")
+        record_path = self.handoff / visual["evidenceRecordPath"]
+        record = _read_json(record_path)
+        record["artifacts"]["diff"]["sha256"] = _sha256(
+            self.handoff / visual["diffPath"]
+        )
+        _write_json(record_path, record)
+        visual["evidenceRecordSha256"] = _sha256(record_path)
+        _write_csv(path, rows, list(rows[0]))
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "QA_IMAGE_DIMENSION_MISMATCH",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_reports_recorded_pixel_ratio_that_differs_from_computed(self):
+        path = self.handoff / "contracts" / "visual-qa-matrix.csv"
+        rows = _read_csv(path)
+        visual = next(row for row in rows if row["evidenceType"] == "visual")
+        record_path = self.handoff / visual["evidenceRecordPath"]
+        record = _read_json(record_path)
+        record["checks"][0]["actualPixelRatio"] = 0.5
+        _write_json(record_path, record)
+        visual["evidenceRecordSha256"] = _sha256(record_path)
+        _write_csv(path, rows, list(rows[0]))
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "QA_PIXEL_RATIO_MISMATCH",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_reports_visual_pixel_ratio_above_region_tolerance(self):
+        path = self.handoff / "contracts" / "visual-qa-matrix.csv"
+        rows = _read_csv(path)
+        visual = next(row for row in rows if row["evidenceType"] == "visual")
+        current = Image.open(self.handoff / visual["currentPath"]).convert("RGBA")
+        current.putpixel((0, 0), (255, 0, 0, 255))
+        current.save(self.handoff / visual["currentPath"])
+        reference = Image.open(self.handoff / visual["referencePath"]).convert("RGBA")
+        Image.blend(reference, current, 0.5).save(self.handoff / visual["overlayPath"])
+        ImageChops.difference(reference, current).save(self.handoff / visual["diffPath"])
+        record_path = self.handoff / visual["evidenceRecordPath"]
+        record = _read_json(record_path)
+        record["checks"][0]["actualPixelRatio"] = 1 / (
+            reference.width * reference.height
+        )
+        for name in ("current", "overlay", "diff"):
+            record["artifacts"][name]["sha256"] = _sha256(
+                self.handoff / visual[f"{name}Path"]
+            )
+        _write_json(record_path, record)
+        visual["evidenceRecordSha256"] = _sha256(record_path)
+        _write_csv(path, rows, list(rows[0]))
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "QA_PIXEL_RATIO_EXCEEDS_TOLERANCE",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_reports_structural_checks_that_do_not_resolve(self):
+        path = self.handoff / "contracts" / "visual-qa-matrix.csv"
+        rows = _read_csv(path)
+        structural = next(row for row in rows if row["evidenceType"] == "structural")
+        record_path = self.handoff / structural["evidenceRecordPath"]
+        record = _read_json(record_path)
+        for check in record["checks"]:
+            if check["checkType"] == "requirement-map":
+                check["requirementId"] = "R999"
+            elif check["checkType"] == "region-map":
+                check["regionId"] = "region-missing"
+            elif check["checkType"] == "component-map":
+                check["componentId"] = "component-missing"
+        _write_json(record_path, record)
+        structural["evidenceRecordSha256"] = _sha256(record_path)
+        _write_csv(path, rows, list(rows[0]))
+        _refresh_design_lock(self.handoff)
+
+        codes = self.codes(self.validate(source_root=self.source))
+
+        self.assertTrue(
+            {
+                "QA_STRUCTURAL_REQUIREMENT_NOT_FOUND",
+                "QA_STRUCTURAL_REGION_NOT_FOUND",
+                "QA_STRUCTURAL_COMPONENT_NOT_FOUND",
+            }.issubset(codes),
+            codes,
+        )
+
+    def test_reports_interaction_check_that_does_not_resolve(self):
+        path = self.handoff / "contracts" / "visual-qa-matrix.csv"
+        rows = _read_csv(path)
+        interaction = next(row for row in rows if row["evidenceType"] == "interaction")
+        record_path = self.handoff / interaction["evidenceRecordPath"]
+        record = _read_json(record_path)
+        record["checks"][0]["interactionId"] = "interaction-missing"
+        _write_json(record_path, record)
+        interaction["evidenceRecordSha256"] = _sha256(record_path)
+        _write_csv(path, rows, list(rows[0]))
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "QA_INTERACTION_NOT_FOUND",
+            self.codes(self.validate(source_root=self.source)),
+        )
 
     def test_reports_malformed_json(self):
         (self.handoff / "contracts" / "page-inventory.json").write_text(

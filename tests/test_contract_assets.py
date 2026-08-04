@@ -805,6 +805,8 @@ class ContractAssetTests(unittest.TestCase):
                 "currentPath",
                 "overlayPath",
                 "diffPath",
+                "evidenceRecordPath",
+                "evidenceRecordSha256",
                 "status",
                 "notesZh",
                 "notesEn",
