@@ -1,0 +1,397 @@
+import csv
+import hashlib
+import json
+from pathlib import Path
+import shutil
+import tempfile
+import types
+import unittest
+from unittest import mock
+
+from jsonschema import Draft202012Validator
+from PIL import Image
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+SCRIPT_PATH = (
+    REPOSITORY_ROOT
+    / "skill"
+    / "preparing-ui-replica-handoffs"
+    / "scripts"
+    / "prepare_handoff.py"
+)
+SCHEMA_ROOT = (
+    REPOSITORY_ROOT
+    / "skill"
+    / "preparing-ui-replica-handoffs"
+    / "assets"
+    / "schemas"
+)
+
+PREPARE_HANDOFF = types.ModuleType("prepare_handoff")
+PREPARE_HANDOFF.__file__ = str(SCRIPT_PATH)
+exec(
+    compile(SCRIPT_PATH.read_bytes(), str(SCRIPT_PATH), "exec"),
+    PREPARE_HANDOFF.__dict__,
+)
+
+
+def _write_image(path, size, color, image_format):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", size, color).save(path, format=image_format)
+
+
+def _source_set_hash(records):
+    digest = hashlib.sha256()
+    for relative_path, file_hash in records:
+        digest.update(relative_path.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(file_hash.encode("ascii"))
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
+def _file_bytes(root):
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+class PrepareHandoffTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary_directory.cleanup)
+        self.root = Path(self.temporary_directory.name)
+        self.source = self.root / "design-source"
+        self.source.mkdir()
+
+    def make_three_image_source(self):
+        duplicate = self.source / "A" / "duplicate.PNG"
+        original = self.source / "b" / "原始 页面.png"
+        jpeg = self.source / "z final.JPEG"
+        _write_image(original, (2, 3), (10, 20, 30), "PNG")
+        duplicate.parent.mkdir(parents=True)
+        duplicate.write_bytes(original.read_bytes())
+        _write_image(jpeg, (4, 2), (80, 90, 100), "JPEG")
+        (self.source / "notes.txt").write_text("not an image", encoding="utf-8")
+        return duplicate, original, jpeg
+
+    def assert_contract_valid(self, schema_name, document):
+        schema = json.loads((SCHEMA_ROOT / schema_name).read_text(encoding="utf-8"))
+        errors = sorted(
+            Draft202012Validator(schema).iter_errors(document),
+            key=lambda error: list(error.absolute_path),
+        )
+        self.assertEqual(
+            errors,
+            [],
+            "\n".join(
+                f"{schema_name} {list(error.absolute_path)}: {error.message}"
+                for error in errors
+            ),
+        )
+
+    def test_collect_images_orders_paths_and_reports_real_image_metadata(self):
+        duplicate, original, jpeg = self.make_three_image_source()
+
+        images = PREPARE_HANDOFF.collect_images(self.source)
+
+        self.assertEqual(
+            [image["sourceRelativePath"] for image in images],
+            ["A/duplicate.PNG", "b/原始 页面.png", "z final.JPEG"],
+        )
+        self.assertEqual(
+            [
+                (
+                    image["mediaType"],
+                    image["width"],
+                    image["height"],
+                    image["byteSize"],
+                    image["sha256"],
+                )
+                for image in images
+            ],
+            [
+                (
+                    "image/png",
+                    2,
+                    3,
+                    duplicate.stat().st_size,
+                    hashlib.sha256(duplicate.read_bytes()).hexdigest(),
+                ),
+                (
+                    "image/png",
+                    2,
+                    3,
+                    original.stat().st_size,
+                    hashlib.sha256(original.read_bytes()).hexdigest(),
+                ),
+                (
+                    "image/jpeg",
+                    4,
+                    2,
+                    jpeg.stat().st_size,
+                    hashlib.sha256(jpeg.read_bytes()).hexdigest(),
+                ),
+            ],
+        )
+        self.assertEqual(
+            PREPARE_HANDOFF.sha256_file(jpeg),
+            hashlib.sha256(jpeg.read_bytes()).hexdigest(),
+        )
+
+    def test_prepare_generates_deterministic_schema_valid_bilingual_skeleton(self):
+        self.make_three_image_source()
+        source_before = _file_bytes(self.source)
+        first_output = self.root / "handoff-one"
+        second_output = self.root / "handoff-two"
+
+        first = PREPARE_HANDOFF.prepare_handoff(
+            self.source, first_output, design_version="v1"
+        )
+        second = PREPARE_HANDOFF.prepare_handoff(
+            self.source, second_output, design_version="v1"
+        )
+
+        self.assertEqual(_file_bytes(self.source), source_before)
+        self.assertEqual(_file_bytes(first_output), _file_bytes(second_output))
+        self.assertEqual(first["status"], "prepared")
+        self.assertEqual(second["status"], "prepared")
+        self.assertEqual(first["assetCount"], 3)
+
+        manifest_path = first_output / "contracts" / "asset-manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        expected_source_hash = _source_set_hash(
+            [
+                (asset["sourceRelativePath"], asset["sha256"])
+                for asset in manifest["assets"]
+            ]
+        )
+        self.assertEqual(manifest["sourceSetHash"], expected_source_hash)
+        self.assertEqual(first["sourceSetHash"], expected_source_hash)
+        self.assertEqual(
+            [asset["duplicateGroupId"] for asset in manifest["assets"]],
+            ["D001", "D001", None],
+        )
+        self.assertEqual(
+            [asset["deliveryRelativePath"] for asset in manifest["assets"]],
+            [
+                "assets/designs/v1/P001-S01-V01-unclassified.png",
+                "assets/designs/v1/P002-S01-V01-unclassified.png",
+                "assets/designs/v1/P003-S01-V01-unclassified.jpg",
+            ],
+        )
+        for asset in manifest["assets"]:
+            copied = first_output / asset["deliveryRelativePath"]
+            source = self.source / asset["sourceRelativePath"]
+            self.assertEqual(copied.read_bytes(), source.read_bytes())
+            self.assertEqual(
+                hashlib.sha256(copied.read_bytes()).hexdigest(), asset["sha256"]
+            )
+
+        inventory = json.loads(
+            (first_output / "contracts" / "page-inventory.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            [
+                f'{page["pageId"]}-{page["stateId"]}-{page["variantId"]}'
+                for page in inventory["pages"]
+            ],
+            ["P001-S01-V01", "P002-S01-V01", "P003-S01-V01"],
+        )
+        for page in inventory["pages"]:
+            self.assertIsNone(page["route"]["path"])
+            self.assertEqual(page["route"]["evidenceLevel"], "unknown")
+            self.assertRegex(page["route"]["gapId"], r"^G[0-9]{3,}$")
+            self.assertEqual(page["shell"]["shellId"], "unclassified")
+            self.assertEqual(page["components"], [])
+            self.assertEqual(page["interactions"], [])
+
+        schema_contracts = {
+            "asset-manifest.schema.json": "asset-manifest.json",
+            "page-inventory.schema.json": "page-inventory.json",
+            "ui-style-contract.schema.json": "ui-style-contract.json",
+            "component-registry.schema.json": "component-registry.json",
+            "implementation-map.schema.json": "implementation-map.json",
+            "capture-profile.schema.json": "capture-profile.json",
+            "diff-regions.schema.json": "diff-regions.json",
+            "design-lock.schema.json": "design-lock.json",
+        }
+        for schema_name, contract_name in schema_contracts.items():
+            with self.subTest(contract=contract_name):
+                document = json.loads(
+                    (first_output / "contracts" / contract_name).read_text(
+                        encoding="utf-8"
+                    )
+                )
+                self.assert_contract_valid(schema_name, document)
+
+        expected_files = {
+            "README.md",
+            "assets/designs/v1/P001-S01-V01-unclassified.png",
+            "assets/designs/v1/P002-S01-V01-unclassified.png",
+            "assets/designs/v1/P003-S01-V01-unclassified.jpg",
+            "docs/zh/设计稿总目录.md",
+            "docs/zh/UI实施说明.md",
+            "docs/zh/组件规范.md",
+            "docs/zh/pages/P001-S01-V01-unclassified.md",
+            "docs/zh/pages/P002-S01-V01-unclassified.md",
+            "docs/zh/pages/P003-S01-V01-unclassified.md",
+            "docs/en/Design-Catalog.md",
+            "docs/en/UI-Implementation-Guide.md",
+            "docs/en/Component-Specification.md",
+            "docs/en/pages/P001-S01-V01-unclassified.md",
+            "docs/en/pages/P002-S01-V01-unclassified.md",
+            "docs/en/pages/P003-S01-V01-unclassified.md",
+            "contracts/requirement-ledger.csv",
+            "contracts/gap-register.csv",
+            "contracts/asset-manifest.json",
+            "contracts/page-inventory.json",
+            "contracts/ui-style-contract.json",
+            "contracts/component-registry.json",
+            "contracts/implementation-map.json",
+            "contracts/capture-profile.json",
+            "contracts/diff-regions.json",
+            "contracts/visual-qa-matrix.csv",
+            "contracts/design-lock.json",
+            "reports/validation-report.json",
+            "tools/validate-command.txt",
+        }
+        self.assertSetEqual(set(_file_bytes(first_output)), expected_files)
+        self.assertFalse((first_output / "reports" / "contact-sheet.png").exists())
+
+        with (first_output / "contracts" / "gap-register.csv").open(
+            encoding="utf-8", newline=""
+        ) as stream:
+            gaps = list(csv.DictReader(stream))
+        self.assertGreaterEqual(len(gaps), 4)
+        self.assertTrue(all(row["evidenceLevel"] == "unknown" for row in gaps))
+        self.assertTrue(all(row["gapId"] for row in gaps))
+
+        for locale_root in (first_output / "docs" / "zh", first_output / "docs" / "en"):
+            for document in locale_root.rglob("*.md"):
+                text = document.read_text(encoding="utf-8")
+                self.assertNotIn("{{", text)
+                self.assertNotIn(str(self.root), text)
+        english_names = {path.name for path in (first_output / "docs" / "en").iterdir()}
+        self.assertSetEqual(
+            english_names,
+            {
+                "Design-Catalog.md",
+                "UI-Implementation-Guide.md",
+                "Component-Specification.md",
+                "pages",
+            },
+        )
+
+    def test_dry_run_returns_the_plan_without_writing_any_output(self):
+        self.make_three_image_source()
+        output = self.root / "dry-run-output"
+        source_before = _file_bytes(self.source)
+
+        result = PREPARE_HANDOFF.prepare_handoff(
+            self.source, output, design_version="draft-2", dry_run=True
+        )
+
+        self.assertEqual(result["status"], "dry-run")
+        self.assertEqual(result["assetCount"], 3)
+        self.assertIn("contracts/design-lock.json", result["plannedFiles"])
+        self.assertFalse(output.exists())
+        self.assertEqual(_file_bytes(self.source), source_before)
+
+    def test_force_replaces_managed_output_but_never_unmanaged_content(self):
+        self.make_three_image_source()
+        managed = self.root / "managed"
+        PREPARE_HANDOFF.prepare_handoff(self.source, managed, design_version="v1")
+        before = _file_bytes(managed)
+
+        PREPARE_HANDOFF.prepare_handoff(
+            self.source, managed, design_version="v1", force=True
+        )
+
+        self.assertEqual(_file_bytes(managed), before)
+        owner_note = managed / "owner-note.txt"
+        owner_note.write_text("do not replace", encoding="utf-8")
+        with self.assertRaisesRegex(FileExistsError, "unmanaged|collision"):
+            PREPARE_HANDOFF.prepare_handoff(
+                self.source, managed, design_version="v1", force=True
+            )
+        self.assertEqual(owner_note.read_text(encoding="utf-8"), "do not replace")
+
+        unmanaged = self.root / "unmanaged"
+        unmanaged.mkdir()
+        sentinel = unmanaged / "keep.txt"
+        sentinel.write_text("owner data", encoding="utf-8")
+        for force in (False, True):
+            with self.subTest(force=force):
+                with self.assertRaisesRegex(FileExistsError, "unmanaged|collision"):
+                    PREPARE_HANDOFF.prepare_handoff(
+                        self.source,
+                        unmanaged,
+                        design_version="v1",
+                        force=force,
+                    )
+                self.assertEqual(sentinel.read_text(encoding="utf-8"), "owner data")
+
+    def test_missing_empty_corrupt_and_nested_sources_fail_closed(self):
+        with self.subTest(case="missing source"):
+            with self.assertRaises(FileNotFoundError):
+                PREPARE_HANDOFF.collect_images(self.root / "missing")
+
+        with self.subTest(case="no supported images"):
+            (self.source / "readme.txt").write_text("none", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "supported image"):
+                PREPARE_HANDOFF.collect_images(self.source)
+
+        with self.subTest(case="corrupt image"):
+            corrupt_source = self.root / "corrupt-source"
+            corrupt_source.mkdir()
+            (corrupt_source / "broken.png").write_bytes(b"not a png")
+            with self.assertRaisesRegex(ValueError, "corrupt|invalid"):
+                PREPARE_HANDOFF.collect_images(corrupt_source)
+
+        with self.subTest(case="output nested under source"):
+            nested_source = self.root / "nested-source"
+            _write_image(nested_source / "screen.png", (1, 1), (1, 2, 3), "PNG")
+            source_before = _file_bytes(nested_source)
+            nested_output = nested_source / "generated" / "handoff"
+            with self.assertRaisesRegex(ValueError, "nested|overlap"):
+                PREPARE_HANDOFF.prepare_handoff(
+                    nested_source, nested_output, design_version="v1"
+                )
+            self.assertFalse(nested_output.exists())
+            self.assertEqual(_file_bytes(nested_source), source_before)
+
+    def test_source_drift_aborts_before_any_design_lock_is_published(self):
+        image = self.source / "screen.png"
+        _write_image(image, (2, 2), (15, 25, 35), "PNG")
+        output = self.root / "drift-output"
+        real_copyfile = shutil.copyfile
+        mutated = False
+
+        def copy_then_mutate(source, destination, *args, **kwargs):
+            nonlocal mutated
+            result = real_copyfile(source, destination, *args, **kwargs)
+            if not mutated:
+                mutated = True
+                Path(source).write_bytes(Path(source).read_bytes() + b"drift")
+            return result
+
+        with mock.patch.object(
+            PREPARE_HANDOFF.shutil, "copyfile", side_effect=copy_then_mutate
+        ):
+            with self.assertRaisesRegex(RuntimeError, "source.*changed|drift"):
+                PREPARE_HANDOFF.prepare_handoff(
+                    self.source, output, design_version="v1"
+                )
+
+        self.assertTrue(mutated)
+        self.assertFalse((output / "contracts" / "design-lock.json").exists())
+
+
+if __name__ == "__main__":
+    unittest.main()
