@@ -1104,7 +1104,12 @@ def _write_files(root: Path, files: dict[str, bytes]) -> None:
     for relative_path in sorted(files):
         path = root / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(files[relative_path])
+        _write_bytes_exclusive(path, files[relative_path])
+
+
+def _write_bytes_exclusive(path: Path, content: bytes) -> None:
+    with path.open("xb") as stream:
+        stream.write(content)
 
 
 def _copy_and_verify_sources(
@@ -1117,7 +1122,7 @@ def _copy_and_verify_sources(
     for asset, image in zip(assets, image_snapshots):
         destination = staging_root / asset["deliveryRelativePath"]
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes(image["_content"])
+        _write_bytes_exclusive(destination, image["_content"])
 
     for asset in assets:
         copy = staging_root / asset["deliveryRelativePath"]
@@ -1183,15 +1188,20 @@ def _write_design_lock(
         "status": "generated",
     }
     lock_path = staging_root / "contracts" / "design-lock.json"
-    lock_path.write_bytes(_json_bytes(lock))
+    _write_bytes_exclusive(lock_path, _json_bytes(lock))
 
 
 def _publication_collision(message: str) -> FileExistsError:
     return FileExistsError(f"output drift/race collision: {message}")
 
 
-def _recovery_root(output_root: Path) -> Path:
-    return output_root.with_name(output_root.name + ".recovery")
+def _create_unique_recovery_root(output_root: Path) -> Path:
+    return Path(
+        tempfile.mkdtemp(
+            prefix=output_root.name + ".recovery-",
+            dir=output_root.parent,
+        )
+    )
 
 
 def _remove_empty_recovery_root(recovery_root: Path) -> None:
@@ -1203,27 +1213,16 @@ def _remove_empty_recovery_root(recovery_root: Path) -> None:
 def _publish_staging(
     staging_root: Path, output_root: Path, authorized_snapshot: dict | None
 ) -> dict:
-    recovery_root = _recovery_root(output_root)
+    recovery_root = _create_unique_recovery_root(output_root)
     publication = {
         "recoveryRoot": recovery_root,
         "previousRoot": None,
     }
     if authorized_snapshot is None:
-        if os.path.lexists(recovery_root):
-            raise _publication_collision(
-                f"recovery name already exists: {recovery_root.name}"
-            )
         if os.path.lexists(output_root):
             raise _publication_collision(output_root.name)
         _atomic_no_replace_directory_move(staging_root, output_root)
         return publication
-
-    try:
-        recovery_root.mkdir()
-    except FileExistsError as error:
-        raise _publication_collision(
-            f"recovery name already exists: {recovery_root.name}"
-        ) from error
 
     if _managed_output_snapshot(output_root) != authorized_snapshot:
         raise _publication_collision(output_root.name)
@@ -1274,9 +1273,14 @@ def _quarantine_after_source_drift(output_root: Path, publication: dict) -> None
     if not output_root.exists():
         raise RuntimeError("post-publication source drift; public target is missing")
     recovery_root = publication["recoveryRoot"]
-    if not recovery_root.exists():
-        recovery_root.mkdir()
-    _move_to_unique_quarantine(output_root, recovery_root)
+    try:
+        if not recovery_root.is_dir() or recovery_root.is_symlink():
+            raise NotADirectoryError(str(recovery_root))
+        _move_to_unique_quarantine(output_root, recovery_root)
+    except (FileNotFoundError, NotADirectoryError):
+        recovery_root = _create_unique_recovery_root(output_root)
+        publication["recoveryRoot"] = recovery_root
+        _move_to_unique_quarantine(output_root, recovery_root)
     if previous_root is not None:
         if output_root.exists():
             raise RuntimeError("post-publication source drift; restore collision")
