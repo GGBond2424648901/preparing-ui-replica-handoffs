@@ -1,6 +1,7 @@
 import hashlib
 import json
 from pathlib import Path
+import re
 import tempfile
 import types
 import unittest
@@ -93,6 +94,30 @@ class ContactSheetTests(unittest.TestCase):
         )
         self.assertEqual(first_result["labels"], second_result["labels"])
         self.assertEqual(first.read_bytes(), second.read_bytes())
+
+    def test_rejects_nonfinite_numbers_in_manifest_json(self):
+        contact_sheet = _load_module(CONTACT_SHEET_PATH, "build_contact_sheet_strict")
+        manifest_path = self.handoff / "contracts" / "asset-manifest.json"
+        original = manifest_path.read_text(encoding="utf-8")
+        for index, constant in enumerate(("NaN", "Infinity", "-Infinity"), start=1):
+            with self.subTest(constant=constant):
+                output = self.handoff / "reports" / f"nonfinite-{index}.png"
+                manifest_path.write_text(
+                    original.replace('"byteSize": 633', f'"byteSize": {constant}')
+                    if '"byteSize": 633' in original
+                    else re.sub(
+                        r'"byteSize":\s*[0-9]+',
+                        f'"byteSize": {constant}',
+                        original,
+                        count=1,
+                    ),
+                    encoding="utf-8",
+                )
+
+                with self.assertRaisesRegex(ValueError, "non-finite JSON"):
+                    contact_sheet.build_contact_sheet(self.handoff, output)
+
+                self.assertFalse(output.exists())
 
     def test_rejects_output_that_already_exists_or_aliases_an_input(self):
         contact_sheet = _load_module(CONTACT_SHEET_PATH, "build_contact_sheet")

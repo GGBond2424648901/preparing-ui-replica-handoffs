@@ -4,6 +4,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -127,15 +128,15 @@ def _refresh_design_lock(handoff):
     _write_json(lock_path, lock)
 
 
-def _write_passing_qa_evidence(handoff, row, page, requirement_id):
+def _write_passing_qa_evidence(handoff, row, page, requirement_id, mapping):
     qa_root = f"reports/qa/{row['qaId']}"
     artifact_paths = {
-        "reference": f"{qa_root}/reference.png",
+        "reference": row["referencePath"],
         "current": f"{qa_root}/current.png",
         "overlay": f"{qa_root}/overlay.png",
         "diff": f"{qa_root}/diff.png",
     }
-    source_reference = Image.open(handoff / row["referencePath"]).convert("RGBA")
+    source_reference = Image.open(handoff / artifact_paths["reference"]).convert("RGBA")
     images = {
         "reference": source_reference,
         "current": source_reference.copy(),
@@ -145,9 +146,18 @@ def _write_passing_qa_evidence(handoff, row, page, requirement_id):
         images["reference"], images["current"]
     )
     for name, image in images.items():
+        if name == "reference":
+            continue
         target = handoff / artifact_paths[name]
         target.parent.mkdir(parents=True, exist_ok=True)
-        image.save(target, format="PNG")
+        if name == "current":
+            target.write_bytes((handoff / artifact_paths["reference"]).read_bytes())
+        elif name == "overlay" and images["reference"].tobytes() == images[
+            "current"
+        ].tobytes():
+            target.write_bytes((handoff / artifact_paths["reference"]).read_bytes())
+        else:
+            image.save(target, format="PNG")
 
     if row["evidenceType"] == "visual":
         checks = [
@@ -184,6 +194,106 @@ def _write_passing_qa_evidence(handoff, row, page, requirement_id):
             }
         ]
 
+    runner = {
+        "qaId": row["qaId"],
+        "pageId": row["pageId"],
+        "stateId": row["stateId"],
+        "variantId": row["variantId"],
+        "evidenceType": row["evidenceType"],
+        "tool": "fixture-runner",
+        "version": "1.0.0",
+        "command": "fixture-runner --replay structured-input.json",
+        "exitCode": 0,
+        "startedAt": "2026-08-04T10:00:00Z",
+        "finishedAt": "2026-08-04T10:00:01Z",
+        "assertions": checks,
+        "artifacts": {},
+    }
+    if row["evidenceType"] == "visual":
+        runner.update(
+            {
+                "route": page["route"]["path"],
+                "captureProfileId": row["captureProfileId"],
+            }
+        )
+        runner["artifacts"]["current"] = {
+            "path": artifact_paths["current"],
+            "sha256": _sha256(handoff / artifact_paths["current"]),
+        }
+    elif row["evidenceType"] == "structural":
+        dom_path = f"{qa_root}/dom-snapshot.json"
+        dom_snapshot = {
+            "pageId": row["pageId"],
+            "stateId": row["stateId"],
+            "variantId": row["variantId"],
+            "nodes": [
+                {
+                    "nodeId": "node-card",
+                    "regionId": page["regions"][0]["regionId"],
+                    "componentId": page["components"][0]["componentId"],
+                }
+            ],
+        }
+        _write_json(handoff / dom_path, dom_snapshot)
+        implementation_path = f"{qa_root}/implementation-snapshot.json"
+        implementation_snapshot = {
+            "pageId": row["pageId"],
+            "stateId": row["stateId"],
+            "variantId": row["variantId"],
+            "entries": [
+                {
+                    "targetFile": target_file,
+                    "sha256": _sha256(handoff / target_file),
+                }
+                for target_file in mapping["targetFiles"]
+            ],
+        }
+        _write_json(handoff / implementation_path, implementation_snapshot)
+        runner["artifacts"].update(
+            {
+                "domSnapshot": {
+                    "path": dom_path,
+                    "sha256": _sha256(handoff / dom_path),
+                },
+                "implementationSnapshot": {
+                    "path": implementation_path,
+                    "sha256": _sha256(handoff / implementation_path),
+                },
+            }
+        )
+    else:
+        test_cases = [
+            {
+                "testCaseId": f"case-{interaction['interactionId']}",
+                "interactionId": interaction["interactionId"],
+                "status": "pass",
+                "assertions": [
+                    {
+                        "assertionId": f"assert-{interaction['interactionId']}",
+                        "status": "pass",
+                    }
+                ],
+            }
+            for interaction in page["interactions"]
+        ]
+        result_path = f"{qa_root}/interaction-result.json"
+        _write_json(
+            handoff / result_path,
+            {
+                "pageId": row["pageId"],
+                "stateId": row["stateId"],
+                "variantId": row["variantId"],
+                "testCases": test_cases,
+            },
+        )
+        runner["testCases"] = test_cases
+        runner["artifacts"]["interactionResult"] = {
+            "path": result_path,
+            "sha256": _sha256(handoff / result_path),
+        }
+    runner_path = f"{qa_root}/runner-result.json"
+    _write_json(handoff / runner_path, runner)
+
     record = {
         "qaId": row["qaId"],
         "pageId": row["pageId"],
@@ -194,6 +304,8 @@ def _write_passing_qa_evidence(handoff, row, page, requirement_id):
         "tool": "fixture-evidence-runner",
         "command": "python -m unittest tests.test_validate_handoff",
         "checks": checks,
+        "runnerResultPath": runner_path,
+        "runnerResultSha256": _sha256(handoff / runner_path),
         "artifacts": {
             name: {"path": path, "sha256": _sha256(handoff / path)}
             for name, path in artifact_paths.items()
@@ -211,6 +323,39 @@ def _write_passing_qa_evidence(handoff, row, page, requirement_id):
             "evidenceRecordSha256": _sha256(handoff / evidence_path),
             "status": "pass",
         }
+    )
+
+
+def _rewrite_runner(handoff, evidence_type, mutate):
+    qa_path = handoff / "contracts" / "visual-qa-matrix.csv"
+    rows = _read_csv(qa_path)
+    row = next(item for item in rows if item["evidenceType"] == evidence_type)
+    record_path = handoff / row["evidenceRecordPath"]
+    record = _read_json(record_path)
+    runner_path = handoff / record["runnerResultPath"]
+    runner = _read_json(runner_path)
+    mutate(runner, record, row)
+    _write_json(runner_path, runner)
+    record["runnerResultSha256"] = _sha256(runner_path)
+    _write_json(record_path, record)
+    row["evidenceRecordSha256"] = _sha256(record_path)
+    _write_csv(qa_path, rows, list(rows[0]))
+    _refresh_design_lock(handoff)
+    return row, record, runner
+
+
+def _rewrite_page_section(path, section_id, transform):
+    text = path.read_text(encoding="utf-8")
+    pattern = re.compile(
+        rf"(?ms)(^sectionId:\s*{re.escape(section_id)}\s*$)(.*?)(?=^sectionId:|\Z)"
+    )
+    match = pattern.search(text)
+    if match is None:
+        raise AssertionError(f"missing section {section_id} in {path}")
+    body = transform(match.group(2))
+    path.write_text(
+        text[: match.start()] + match.group(1) + body + text[match.end() :],
+        encoding="utf-8",
     )
 
 
@@ -328,23 +473,6 @@ def _resolve_generated_skeleton(handoff):
     ]
     _write_json(registry_path, registry)
 
-    for page in page_inventory["pages"]:
-        identity = f"{page['pageId']}-{page['stateId']}-{page['variantId']}"
-        identifiers = [
-            *(region["regionId"] for region in page["regions"]),
-            *(component["componentId"] for component in page["components"]),
-            *(interaction["interactionId"] for interaction in page["interactions"]),
-        ]
-        for locale in ("zh", "en"):
-            path = next((handoff / "docs" / locale / "pages").glob(f"{identity}-*.md"))
-            path.write_text(
-                path.read_text(encoding="utf-8")
-                + "\n\nMachine contract IDs: "
-                + ", ".join(f"`{identifier}`" for identifier in identifiers)
-                + "\n",
-                encoding="utf-8",
-            )
-
     style_path = handoff / "contracts" / "ui-style-contract.json"
     style = _read_json(style_path)
     style.update({"evidenceLevel": "approved", "status": "approved", "gapIds": []})
@@ -358,10 +486,46 @@ def _resolve_generated_skeleton(handoff):
     implementation = _read_json(implementation_path)
     for number, mapping in enumerate(implementation["mappings"], start=1):
         target = f"src/pages/page-{number}.py"
+        target_path = handoff / target
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_text(
+            f"# implementation for {mapping['pageId']}\n",
+            encoding="utf-8",
+        )
+        page = page_inventory["pages"][number - 1]
         mapping.update(
             {
                 "route": f"/page-{number}",
                 "targetFiles": [target],
+                "shellComponentId": "app-shell",
+                "regionMappings": [
+                    {
+                        "regionId": page["regions"][0]["regionId"],
+                        "targetSelector": "main",
+                        "targetFile": target,
+                        "evidenceLevel": "approved",
+                        "gapIds": [],
+                    }
+                ],
+                "componentMappings": [
+                    {
+                        "instanceId": page["components"][0]["instanceId"],
+                        "componentId": page["components"][0]["componentId"],
+                        "targetSymbol": "PageCard",
+                        "targetFile": target,
+                        "evidenceLevel": "approved",
+                        "gapIds": [],
+                    }
+                ],
+                "interactionMappings": [
+                    {
+                        "interactionId": page["interactions"][0]["interactionId"],
+                        "targetHandler": "open_details",
+                        "status": "approved",
+                        "evidenceLevel": "approved",
+                        "gapId": None,
+                    }
+                ],
                 "evidenceLevel": "approved",
                 "status": "approved",
                 "gapIds": [],
@@ -377,6 +541,66 @@ def _resolve_generated_skeleton(handoff):
                 }
             )
     _write_json(implementation_path, implementation)
+
+    mappings = {
+        mapping["pageId"]: mapping for mapping in implementation["mappings"]
+    }
+    for page in page_inventory["pages"]:
+        identity = f"{page['pageId']}-{page['stateId']}-{page['variantId']}"
+        source_link = next(
+            asset["deliveryRelativePath"]
+            for asset in _read_json(handoff / "contracts" / "asset-manifest.json")["assets"]
+            if asset["assetId"] == page["sourceAssetIds"][0]
+        )
+        section_values = {
+            "identity-and-evidence": [identity, *page["sourceAssetIds"]],
+            "canvas-shell-regions": [
+                page["shell"]["shellId"],
+                *(region["regionId"] for region in page["regions"]),
+            ],
+            "layout-copy-icons-data": [
+                *(item["relationshipId"] for item in page["layoutRelationships"]),
+                *(item["copyId"] for item in page["copy"]),
+                *(item["iconId"] for item in page["icons"]),
+                *(item["dataId"] for item in page["data"]),
+            ],
+            "components-interactions-responsive": [
+                *(item["instanceId"] for item in page["components"]),
+                *(item["componentId"] for item in page["components"]),
+                *(item["interactionId"] for item in page["interactions"]),
+                *(item["responsiveVariantId"] for item in page["responsiveVariants"]),
+            ],
+            "qa-and-gaps": [
+                *(item["qaId"] for item in page["acceptanceCriteria"]),
+                *page["gapIds"],
+            ],
+        }
+        for locale, locale_code in (("zh", "zh-CN"), ("en", "en-US")):
+            path = next((handoff / "docs" / locale / "pages").glob(f"{identity}-*.md"))
+            lines = [
+                "---",
+                "templateId: page-contract",
+                f"locale: {locale_code}",
+                "---",
+                "",
+                f"# Page Contract: {identity}",
+                "",
+            ]
+            for section_id, values in section_values.items():
+                body = " ".join(f"`{value}`" for value in values)
+                if section_id == "identity-and-evidence":
+                    body += f" [design](../../../{source_link})"
+                lines.extend(
+                    [
+                        f"sectionId: {section_id}",
+                        "",
+                        f"## {section_id}",
+                        "",
+                        body,
+                        "",
+                    ]
+                )
+            path.write_text("\n".join(lines), encoding="utf-8")
 
     capture_path = handoff / "contracts" / "capture-profile.json"
     capture = _read_json(capture_path)
@@ -415,6 +639,7 @@ def _resolve_generated_skeleton(handoff):
             row,
             pages[row["pageId"]],
             requirements[row["pageId"]],
+            mappings[row["pageId"]],
         )
     _write_csv(qa_path, qa_rows, list(qa_rows[0]))
 
@@ -446,6 +671,59 @@ class ValidateHandoffTests(unittest.TestCase):
 
     def codes(self, result):
         return {issue["code"] for issue in result["issues"]}
+
+    def assert_absence_marker_accepted(self, field, section_id, id_fields):
+        inventory_path = self.handoff / "contracts" / "page-inventory.json"
+        inventory = _read_json(inventory_path)
+        page = inventory["pages"][0]
+        removed_ids = [
+            item[id_field]
+            for item in page[field]
+            for id_field in id_fields
+            if id_field in item
+        ]
+        page[field] = []
+        page["gapIds"] = ["G001"]
+        _write_json(inventory_path, inventory)
+        gap_path = self.handoff / "contracts" / "gap-register.csv"
+        gaps = _read_csv(gap_path)
+        gaps[0]["status"] = "resolved"
+        gaps[0]["resolution"] = f"Reviewed visual evidence [absence:{field}]"
+        _write_csv(gap_path, gaps, list(gaps[0]))
+        identity = f"{page['pageId']}-{page['stateId']}-{page['variantId']}"
+        for locale in ("zh", "en"):
+            document = next(
+                (self.handoff / "docs" / locale / "pages").glob(f"{identity}-*.md")
+            )
+
+            def replace_ids(body):
+                for identifier in removed_ids:
+                    body = body.replace(f"`{identifier}`", "")
+                return body + f"\n`[absence:{field}]`\n"
+
+            _rewrite_page_section(document, section_id, replace_ids)
+            _rewrite_page_section(
+                document,
+                "qa-and-gaps",
+                lambda body: body + "\n`G001`\n",
+            )
+        _refresh_design_lock(self.handoff)
+
+        result = self.validate(source_root=self.source)
+        semantic_issues = [
+            issue
+            for issue in result["issues"]
+            if issue["code"] == "APPROVED_PAGE_SUBSTANTIVE_FIELD_EMPTY"
+            and issue.get("field") == field
+        ]
+        section_issues = [
+            issue
+            for issue in result["issues"]
+            if issue["code"] == "PAGE_DOCUMENT_SECTION_REFERENCE_MISSING"
+            and issue.get("field") == field
+        ]
+        self.assertEqual(semantic_issues, [], result["issues"])
+        self.assertEqual(section_issues, [], result["issues"])
 
     def test_accepts_complete_package_and_exposes_computed_lock_material(self):
         result = self.validate(source_root=self.source)
@@ -494,6 +772,26 @@ class ValidateHandoffTests(unittest.TestCase):
         self.assertIn("PAGE_DOCUMENT_SECTION_MISSING", codes)
         self.assertIn("PAGE_DOCUMENT_REFERENCE_MISSING", codes)
 
+    def test_machine_identifier_in_the_wrong_page_section_fails(self):
+        page = next((self.handoff / "docs" / "en" / "pages").glob("*.md"))
+        component_id = "component-P001-card"
+        _rewrite_page_section(
+            page,
+            "components-interactions-responsive",
+            lambda body: body.replace(f"`{component_id}`", ""),
+        )
+        _rewrite_page_section(
+            page,
+            "qa-and-gaps",
+            lambda body: body + f"\n`{component_id}`\n",
+        )
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "PAGE_DOCUMENT_SECTION_REFERENCE_MISSING",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
     def test_reports_approved_page_with_empty_substantive_contract(self):
         path = self.handoff / "contracts" / "page-inventory.json"
         inventory = _read_json(path)
@@ -526,9 +824,45 @@ class ValidateHandoffTests(unittest.TestCase):
         )
 
     def test_allows_empty_icons_with_resolved_explicit_absence_gap(self):
+        self.assert_absence_marker_accepted(
+            "icons", "layout-copy-icons-data", ("iconId",)
+        )
+
+    def test_allows_empty_layout_with_resolved_explicit_absence_gap(self):
+        self.assert_absence_marker_accepted(
+            "layoutRelationships",
+            "layout-copy-icons-data",
+            ("relationshipId",),
+        )
+
+    def test_allows_empty_copy_with_resolved_explicit_absence_gap(self):
+        self.assert_absence_marker_accepted(
+            "copy", "layout-copy-icons-data", ("copyId",)
+        )
+
+    def test_allows_empty_components_with_resolved_explicit_absence_gap(self):
+        self.assert_absence_marker_accepted(
+            "components",
+            "components-interactions-responsive",
+            ("instanceId", "componentId"),
+        )
+
+    def test_allows_empty_data_with_resolved_explicit_absence_gap(self):
+        self.assert_absence_marker_accepted(
+            "data", "layout-copy-icons-data", ("dataId",)
+        )
+
+    def test_allows_empty_interactions_with_resolved_explicit_absence_gap(self):
+        self.assert_absence_marker_accepted(
+            "interactions",
+            "components-interactions-responsive",
+            ("interactionId",),
+        )
+
+    def test_rejects_absence_marker_for_a_different_empty_field(self):
         inventory_path = self.handoff / "contracts" / "page-inventory.json"
         inventory = _read_json(inventory_path)
-        inventory["pages"][0]["icons"] = []
+        inventory["pages"][0]["copy"] = []
         inventory["pages"][0]["gapIds"] = ["G001"]
         _write_json(inventory_path, inventory)
         gap_path = self.handoff / "contracts" / "gap-register.csv"
@@ -538,9 +872,16 @@ class ValidateHandoffTests(unittest.TestCase):
         _write_csv(gap_path, gaps, list(gaps[0]))
         _refresh_design_lock(self.handoff)
 
-        result = self.validate(source_root=self.source)
+        issues = self.validate(source_root=self.source)["issues"]
 
-        self.assertEqual(result["status"], "passed", result["issues"])
+        self.assertTrue(
+            any(
+                issue["code"] == "APPROVED_PAGE_SUBSTANTIVE_FIELD_EMPTY"
+                and issue.get("field") == "copy"
+                for issue in issues
+            ),
+            issues,
+        )
 
     def test_reports_unresolved_page_component_and_empty_registry(self):
         registry_path = self.handoff / "contracts" / "component-registry.json"
@@ -871,6 +1212,168 @@ class ValidateHandoffTests(unittest.TestCase):
             self.codes(self.validate(source_root=self.source)),
         )
 
+    def test_visual_reference_must_be_the_page_manifest_asset(self):
+        qa_path = self.handoff / "contracts" / "visual-qa-matrix.csv"
+        rows = _read_csv(qa_path)
+        visual = next(row for row in rows if row["evidenceType"] == "visual")
+        copied_reference = "reports/qa/copied-reference.png"
+        target = self.handoff / copied_reference
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((self.handoff / visual["referencePath"]).read_bytes())
+        record_path = self.handoff / visual["evidenceRecordPath"]
+        record = _read_json(record_path)
+        record["artifacts"]["reference"] = {
+            "path": copied_reference,
+            "sha256": _sha256(target),
+        }
+        visual["referencePath"] = copied_reference
+        _write_json(record_path, record)
+        visual["evidenceRecordSha256"] = _sha256(record_path)
+        _write_csv(qa_path, rows, list(rows[0]))
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "QA_VISUAL_REFERENCE_NOT_MANIFEST_ASSET",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_visual_reference_dimensions_must_match_canvas_and_full_region(self):
+        inventory_path = self.handoff / "contracts" / "page-inventory.json"
+        inventory = _read_json(inventory_path)
+        inventory["pages"][0]["canvas"]["width"] -= 1
+        _write_json(inventory_path, inventory)
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "QA_VISUAL_REFERENCE_DIMENSION_MISMATCH",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_copied_current_capture_cannot_pass_without_runner_result(self):
+        qa_path = self.handoff / "contracts" / "visual-qa-matrix.csv"
+        rows = _read_csv(qa_path)
+        visual = next(row for row in rows if row["evidenceType"] == "visual")
+        record_path = self.handoff / visual["evidenceRecordPath"]
+        record = _read_json(record_path)
+        record.pop("runnerResultPath")
+        record.pop("runnerResultSha256")
+        _write_json(record_path, record)
+        visual["evidenceRecordSha256"] = _sha256(record_path)
+        _write_csv(qa_path, rows, list(rows[0]))
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "QA_RUNNER_RESULT_REQUIRED",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_reports_bad_runner_result_hash(self):
+        qa_path = self.handoff / "contracts" / "visual-qa-matrix.csv"
+        rows = _read_csv(qa_path)
+        visual = next(row for row in rows if row["evidenceType"] == "visual")
+        record_path = self.handoff / visual["evidenceRecordPath"]
+        record = _read_json(record_path)
+        record["runnerResultSha256"] = "0" * 64
+        _write_json(record_path, record)
+        visual["evidenceRecordSha256"] = _sha256(record_path)
+        _write_csv(qa_path, rows, list(rows[0]))
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "QA_RUNNER_RESULT_HASH_MISMATCH",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_runner_result_requires_zero_exit_and_passing_assertions(self):
+        def mutate(runner, _record, _row):
+            runner["exitCode"] = 1
+            runner["assertions"][0]["status"] = "fail"
+
+        _rewrite_runner(self.handoff, "visual", mutate)
+        codes = self.codes(self.validate(source_root=self.source))
+
+        self.assertIn("QA_RUNNER_EXECUTION_INVALID", codes)
+        self.assertIn("QA_RUNNER_ASSERTION_NOT_PASSED", codes)
+
+    def test_validator_never_executes_runner_command_text(self):
+        sentinel = self.root / "runner-command-executed.txt"
+
+        def mutate(runner, _record, _row):
+            runner["command"] = (
+                f'python -c "from pathlib import Path; '
+                f"Path(r'{sentinel}').write_text('unsafe')\""
+            )
+
+        _rewrite_runner(self.handoff, "visual", mutate)
+
+        result = self.validate(source_root=self.source)
+
+        self.assertEqual(result["status"], "passed", result["issues"])
+        self.assertFalse(sentinel.exists())
+
+    def test_visual_runner_must_bind_route_capture_profile_and_current_artifact(self):
+        def mutate(runner, _record, _row):
+            runner["route"] = "/wrong"
+            runner["captureProfileId"] = "capture-wrong"
+            runner["artifacts"]["current"]["sha256"] = "0" * 64
+
+        _rewrite_runner(self.handoff, "visual", mutate)
+
+        self.assertIn(
+            "QA_VISUAL_RUNNER_BINDING_MISMATCH",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_structural_runner_dom_snapshot_must_bind_page_region_and_component(self):
+        def mutate(runner, _record, _row):
+            artifact = runner["artifacts"]["domSnapshot"]
+            dom_path = self.handoff / artifact["path"]
+            dom = _read_json(dom_path)
+            dom["nodes"][0]["regionId"] = "region-missing"
+            dom["nodes"][0]["componentId"] = "component-missing"
+            _write_json(dom_path, dom)
+            artifact["sha256"] = _sha256(dom_path)
+
+        _rewrite_runner(self.handoff, "structural", mutate)
+
+        self.assertIn(
+            "QA_STRUCTURAL_DOM_BINDING_MISMATCH",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_structural_runner_implementation_snapshot_must_match_target_files(self):
+        def mutate(runner, _record, _row):
+            artifact = runner["artifacts"]["implementationSnapshot"]
+            snapshot_path = self.handoff / artifact["path"]
+            snapshot = _read_json(snapshot_path)
+            snapshot["entries"][0]["sha256"] = "0" * 64
+            _write_json(snapshot_path, snapshot)
+            artifact["sha256"] = _sha256(snapshot_path)
+
+        _rewrite_runner(self.handoff, "structural", mutate)
+
+        self.assertIn(
+            "QA_STRUCTURAL_IMPLEMENTATION_SNAPSHOT_MISMATCH",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_interaction_runner_cases_require_nonempty_passing_assertions(self):
+        def mutate(runner, _record, _row):
+            runner["testCases"][0]["assertions"] = []
+            artifact = runner["artifacts"]["interactionResult"]
+            result_path = self.handoff / artifact["path"]
+            result = _read_json(result_path)
+            result["testCases"] = runner["testCases"]
+            _write_json(result_path, result)
+            artifact["sha256"] = _sha256(result_path)
+
+        _rewrite_runner(self.handoff, "interaction", mutate)
+
+        self.assertIn(
+            "QA_INTERACTION_CASE_ASSERTIONS_REQUIRED",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
     def test_reports_qa_artifact_hash_mismatch(self):
         path = self.handoff / "contracts" / "visual-qa-matrix.csv"
         rows = _read_csv(path)
@@ -1046,6 +1549,39 @@ class ValidateHandoffTests(unittest.TestCase):
         _refresh_design_lock(self.handoff)
 
         self.assertIn("MALFORMED_JSON", self.codes(self.validate()))
+
+    def test_rejects_nonfinite_numbers_in_machine_contract_json(self):
+        path = self.handoff / "contracts" / "diff-regions.json"
+        original = path.read_text(encoding="utf-8")
+        for constant in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(constant=constant):
+                path.write_text(
+                    original.replace('"pixelRatio": 0', f'"pixelRatio": {constant}'),
+                    encoding="utf-8",
+                )
+                _refresh_design_lock(self.handoff)
+
+                self.assertIn(
+                    "MALFORMED_JSON",
+                    self.codes(self.validate(source_root=self.source)),
+                )
+
+    def test_rejects_nonfinite_visual_metric_in_evidence_record(self):
+        qa_path = self.handoff / "contracts" / "visual-qa-matrix.csv"
+        rows = _read_csv(qa_path)
+        visual = next(row for row in rows if row["evidenceType"] == "visual")
+        record_path = self.handoff / visual["evidenceRecordPath"]
+        record = _read_json(record_path)
+        record["checks"][0]["actualPixelRatio"] = float("nan")
+        _write_json(record_path, record)
+        visual["evidenceRecordSha256"] = _sha256(record_path)
+        _write_csv(qa_path, rows, list(rows[0]))
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "QA_EVIDENCE_RECORD_INVALID_JSON",
+            self.codes(self.validate(source_root=self.source)),
+        )
 
     def test_reports_malformed_csv(self):
         (self.handoff / "contracts" / "visual-qa-matrix.csv").write_text(

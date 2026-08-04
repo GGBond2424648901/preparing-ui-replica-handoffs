@@ -225,6 +225,14 @@ class PrepareHandoffTests(unittest.TestCase):
         self.source = self.root / "design-source"
         self.source.mkdir()
 
+    def test_strict_json_loader_rejects_all_nonfinite_constants(self):
+        for constant in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(constant=constant):
+                with self.assertRaises(ValueError):
+                    PREPARE_HANDOFF._strict_json_loads(
+                        '{"value": ' + constant + "}"
+                    )
+
     def make_three_image_source(self):
         duplicate = self.source / "A" / "duplicate.PNG"
         original = self.source / "b" / "原始 页面.png"

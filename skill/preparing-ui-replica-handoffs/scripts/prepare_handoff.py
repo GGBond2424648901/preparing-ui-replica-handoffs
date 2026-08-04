@@ -20,6 +20,16 @@ from PIL import Image, UnidentifiedImageError
 
 
 SCHEMA_VERSION = "1.0.0"
+
+
+def _reject_nonfinite_json_constant(value: str) -> object:
+    raise ValueError(f"non-finite JSON number is forbidden: {value}")
+
+
+def _strict_json_loads(text: str) -> object:
+    return json.loads(text, parse_constant=_reject_nonfinite_json_constant)
+
+
 SUPPORTED_SUFFIXES = {".gif", ".jpeg", ".jpg", ".png", ".webp"}
 FORMAT_DETAILS = {
     "GIF": ("image/gif", ".gif"),
@@ -321,7 +331,9 @@ def _validate_inputs(
 
 
 def _read_schema(schema_name: str) -> dict:
-    return json.loads((SCHEMA_ROOT / schema_name).read_text(encoding="utf-8"))
+    return _strict_json_loads(
+        (SCHEMA_ROOT / schema_name).read_text(encoding="utf-8")
+    )
 
 
 def _contract_is_schema_valid(schema_name: str, document: dict) -> bool:
@@ -339,13 +351,13 @@ def _managed_output_snapshot(output_root: Path) -> dict | None:
             path = output_root / relative_path
             if path.is_symlink() or not path.is_file():
                 return None
-            document = json.loads(path.read_text(encoding="utf-8"))
+            document = _strict_json_loads(path.read_text(encoding="utf-8"))
             if not isinstance(document, dict) or not _contract_is_schema_valid(
                 schema_name, document
             ):
                 return None
             documents[relative_path] = document
-    except (OSError, UnicodeError, json.JSONDecodeError):
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
         return None
 
     lock = documents["contracts/design-lock.json"]
@@ -786,6 +798,9 @@ def _gap_summary(assets: list[dict], locale: str) -> str:
 def _page_doc_values(number: int, asset: dict, locale: str) -> dict[str, str]:
     identity = f"P{number:03d}-S01-V01"
     gap_id = _numbered("G", number)
+    qa_ids = ", ".join(
+        f"`{entry['qaId']}`" for entry in _qa_entries(number)
+    )
     image_link = f"../../../{asset['deliveryRelativePath']}"
     if locale == "zh-CN":
         identity_text = (
@@ -831,6 +846,7 @@ def _page_doc_values(number: int, asset: dict, locale: str) -> dict[str, str]:
             f"Visual, structural, and interaction QA are `not-run`. Gap `{gap_id}` "
             "must be resolved or approved before completion."
         )
+    qa_text += f"\nQA IDs: {qa_ids}"
     return {
         "pageId": f"P{number:03d}",
         "stateId": "S01",
