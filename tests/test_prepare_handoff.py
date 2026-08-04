@@ -471,6 +471,156 @@ class PrepareHandoffTests(unittest.TestCase):
             (output / "README.md").read_text(encoding="utf-8"), "concurrent edit"
         )
 
+    def test_previous_package_and_late_owner_data_are_never_deleted(self):
+        self.make_three_image_source()
+        output = self.root / "preserved-output"
+        PREPARE_HANDOFF.prepare_handoff(self.source, output, design_version="v1")
+        previous_bytes = _file_bytes(output)
+        real_snapshot = PREPARE_HANDOFF._managed_output_snapshot
+        backup_verifications = 0
+        injected = False
+
+        def snapshot_then_inject_after_final_backup_verification(path):
+            nonlocal backup_verifications, injected
+            snapshot = real_snapshot(path)
+            if Path(path) != output and snapshot is not None:
+                backup_verifications += 1
+                if backup_verifications == 2:
+                    injected = True
+                    (Path(path) / "late-owner.txt").write_text(
+                        "late owner data", encoding="utf-8"
+                    )
+            return snapshot
+
+        with mock.patch.object(
+            PREPARE_HANDOFF,
+            "_managed_output_snapshot",
+            side_effect=snapshot_then_inject_after_final_backup_verification,
+        ):
+            result = PREPARE_HANDOFF.prepare_handoff(
+                self.source, output, design_version="v1", force=True
+            )
+
+        previous = output.with_name(output.name + ".recovery") / "previous"
+        self.assertTrue(injected)
+        self.assertEqual(_file_bytes(output), previous_bytes)
+        self.assertTrue(previous.is_dir())
+        for relative_path, content in previous_bytes.items():
+            self.assertEqual((previous / relative_path).read_bytes(), content)
+        self.assertEqual(
+            (previous / "late-owner.txt").read_text(encoding="utf-8"),
+            "late owner data",
+        )
+        serialized = json.dumps(result, ensure_ascii=False)
+        self.assertNotIn(str(self.root), serialized)
+        self.assertNotRegex(serialized, r"(?i)[A-Z]:[\\/]")
+
+    def test_recovery_name_collision_aborts_without_overwriting_any_content(self):
+        for managed_output in (False, True):
+            with self.subTest(managed_output=managed_output):
+                case_root = self.root / ("managed" if managed_output else "fresh")
+                source = case_root / "source"
+                output = case_root / "output"
+                _write_image(source / "screen.png", (2, 2), (1, 2, 3), "PNG")
+                if managed_output:
+                    PREPARE_HANDOFF.prepare_handoff(
+                        source, output, design_version="v1"
+                    )
+                output_before = _file_bytes(output) if output.exists() else None
+                recovery = output.with_name(output.name + ".recovery")
+                recovery.mkdir()
+                owner_file = recovery / "owner.txt"
+                owner_file.write_text("reserved by owner", encoding="utf-8")
+
+                with self.assertRaisesRegex(
+                    FileExistsError, "recovery|backup|collision"
+                ):
+                    PREPARE_HANDOFF.prepare_handoff(
+                        source,
+                        output,
+                        design_version="v1",
+                        force=managed_output,
+                    )
+
+                self.assertEqual(
+                    owner_file.read_text(encoding="utf-8"), "reserved by owner"
+                )
+                if managed_output:
+                    self.assertEqual(_file_bytes(output), output_before)
+                else:
+                    self.assertFalse(output.exists())
+
+    def test_post_publication_source_drift_quarantines_fresh_package_and_owner_data(self):
+        image = self.source / "screen.png"
+        _write_image(image, (2, 2), (10, 20, 30), "PNG")
+        output = self.root / "fresh-post-drift"
+        real_publish = PREPARE_HANDOFF._publish_staging
+
+        def publish_then_mutate_source_and_target(*args, **kwargs):
+            publication = real_publish(*args, **kwargs)
+            (output / "concurrent-owner.txt").write_text(
+                "preserve me", encoding="utf-8"
+            )
+            _write_image(image, (3, 2), (30, 20, 10), "PNG")
+            return publication
+
+        with mock.patch.object(
+            PREPARE_HANDOFF,
+            "_publish_staging",
+            side_effect=publish_then_mutate_source_and_target,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "post-publication|source.*drift") as error:
+                PREPARE_HANDOFF.prepare_handoff(
+                    self.source, output, design_version="v1"
+                )
+
+        quarantine = output.with_name(output.name + ".recovery") / "quarantine"
+        self.assertFalse(output.exists())
+        self.assertTrue((quarantine / "contracts" / "design-lock.json").is_file())
+        self.assertEqual(
+            (quarantine / "concurrent-owner.txt").read_text(encoding="utf-8"),
+            "preserve me",
+        )
+        self.assertNotIn(str(self.root), str(error.exception))
+
+    def test_post_publication_source_drift_restores_previous_and_quarantines_new(self):
+        image = self.source / "screen.png"
+        _write_image(image, (2, 2), (10, 20, 30), "PNG")
+        output = self.root / "managed-post-drift"
+        PREPARE_HANDOFF.prepare_handoff(self.source, output, design_version="v1")
+        previous_bytes = _file_bytes(output)
+        _write_image(image, (3, 2), (20, 30, 40), "PNG")
+        real_publish = PREPARE_HANDOFF._publish_staging
+
+        def publish_then_mutate_source_and_target(*args, **kwargs):
+            publication = real_publish(*args, **kwargs)
+            (output / "concurrent-owner.txt").write_text(
+                "new package owner data", encoding="utf-8"
+            )
+            _write_image(image, (4, 2), (40, 30, 20), "PNG")
+            return publication
+
+        with mock.patch.object(
+            PREPARE_HANDOFF,
+            "_publish_staging",
+            side_effect=publish_then_mutate_source_and_target,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "post-publication|source.*drift") as error:
+                PREPARE_HANDOFF.prepare_handoff(
+                    self.source, output, design_version="v1", force=True
+                )
+
+        recovery = output.with_name(output.name + ".recovery")
+        quarantine = recovery / "quarantine"
+        self.assertEqual(_file_bytes(output), previous_bytes)
+        self.assertFalse((recovery / "previous").exists())
+        self.assertTrue((quarantine / "contracts" / "design-lock.json").is_file())
+        self.assertEqual(
+            (quarantine / "concurrent-owner.txt").read_text(encoding="utf-8"),
+            "new package owner data",
+        )
+        self.assertNotIn(str(self.root), str(error.exception))
+
     def test_corrupt_lock_metadata_never_authorizes_force_replacement(self):
         mutators = {
             "design version": lambda lock: lock.__setitem__("designVersion", "v2"),
@@ -482,6 +632,9 @@ class PrepareHandoffTests(unittest.TestCase):
             ),
             "generated timestamp": lambda lock: lock.__setitem__(
                 "generatedAt", "not-a-date-time"
+            ),
+            "valid altered timestamp": lambda lock: lock.__setitem__(
+                "generatedAt", "2000-01-01T00:00:00Z"
             ),
             "unexpected field": lambda lock: lock.__setitem__("unexpected", True),
             "duplicate inventory": lambda lock: lock["files"].append(

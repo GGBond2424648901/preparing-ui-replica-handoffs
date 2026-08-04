@@ -181,7 +181,10 @@ def _managed_output_snapshot(output_root: Path) -> dict | None:
     lock = documents["contracts/design-lock.json"]
     manifest = documents["contracts/asset-manifest.json"]
     page_inventory = documents["contracts/page-inventory.json"]
-    if lock["status"] != "generated":
+    if (
+        lock["status"] != "generated"
+        or lock["generatedAt"] != DETERMINISTIC_GENERATED_AT
+    ):
         return None
     if (
         lock["designVersion"] != manifest["designVersion"]
@@ -1017,43 +1020,92 @@ def _publication_collision(message: str) -> FileExistsError:
     return FileExistsError(f"output drift/race collision: {message}")
 
 
+def _recovery_root(output_root: Path) -> Path:
+    return output_root.with_name(output_root.name + ".recovery")
+
+
+def _remove_empty_recovery_root(recovery_root: Path) -> None:
+    try:
+        recovery_root.rmdir()
+    except OSError:
+        pass
+
+
 def _publish_staging(
     staging_root: Path, output_root: Path, authorized_snapshot: dict | None
-) -> None:
+) -> dict:
+    recovery_root = _recovery_root(output_root)
+    try:
+        recovery_root.mkdir()
+    except FileExistsError as error:
+        raise _publication_collision(
+            f"recovery name already exists: {recovery_root.name}"
+        ) from error
+
+    publication = {
+        "recoveryRoot": recovery_root,
+        "previousRoot": None,
+        "quarantineRoot": recovery_root / "quarantine",
+    }
     if authorized_snapshot is None:
         if output_root.exists():
-            raise _publication_collision(str(output_root))
-        staging_root.rename(output_root)
-        return
+            _remove_empty_recovery_root(recovery_root)
+            raise _publication_collision(output_root.name)
+        try:
+            staging_root.rename(output_root)
+        except BaseException:
+            _remove_empty_recovery_root(recovery_root)
+            raise
+        return publication
 
     if _managed_output_snapshot(output_root) != authorized_snapshot:
-        raise _publication_collision(str(output_root))
-    backup_root = Path(
-        tempfile.mkdtemp(prefix=f".{output_root.name}.backup-", dir=output_root.parent)
-    )
-    backup_root.rmdir()
-    output_root.rename(backup_root)
-    if _managed_output_snapshot(backup_root) != authorized_snapshot:
+        _remove_empty_recovery_root(recovery_root)
+        raise _publication_collision(output_root.name)
+    previous_root = recovery_root / "previous"
+    publication["previousRoot"] = previous_root
+    output_root.rename(previous_root)
+    if _managed_output_snapshot(previous_root) != authorized_snapshot:
         if not output_root.exists():
-            backup_root.rename(output_root)
-        raise _publication_collision(str(output_root))
+            previous_root.rename(output_root)
+        _remove_empty_recovery_root(recovery_root)
+        raise _publication_collision(output_root.name)
     if output_root.exists():
-        if not backup_root.exists():
-            raise _publication_collision(str(output_root))
         raise _publication_collision(
-            f"new target appeared; original preserved at {backup_root.name}"
+            f"new target appeared; previous package preserved at "
+            f"{recovery_root.name}/previous"
         )
+    if _managed_output_snapshot(previous_root) != authorized_snapshot:
+        if not output_root.exists():
+            previous_root.rename(output_root)
+        _remove_empty_recovery_root(recovery_root)
+        raise _publication_collision(output_root.name)
     try:
         staging_root.rename(output_root)
     except BaseException:
-        if backup_root.exists() and not output_root.exists():
-            backup_root.rename(output_root)
+        if previous_root.exists() and not output_root.exists():
+            previous_root.rename(output_root)
+        _remove_empty_recovery_root(recovery_root)
         raise
-    if _managed_output_snapshot(backup_root) != authorized_snapshot:
-        raise _publication_collision(
-            f"authorized backup changed and was preserved at {backup_root.name}"
-        )
-    shutil.rmtree(backup_root)
+    return publication
+
+
+def _quarantine_after_source_drift(output_root: Path, publication: dict) -> None:
+    quarantine_root = publication["quarantineRoot"]
+    previous_root = publication["previousRoot"]
+    if quarantine_root.exists():
+        raise RuntimeError("post-publication source drift; quarantine collision")
+    if not output_root.exists():
+        raise RuntimeError("post-publication source drift; public target is missing")
+    output_root.rename(quarantine_root)
+    if previous_root is not None:
+        if output_root.exists():
+            raise RuntimeError("post-publication source drift; restore collision")
+        previous_root.rename(output_root)
+
+
+def _finalize_publication(publication: dict) -> None:
+    if publication["previousRoot"] is None:
+        _remove_empty_recovery_root(publication["recoveryRoot"])
 
 
 def prepare_handoff(
@@ -1091,13 +1143,27 @@ def prepare_handoff(
         tempfile.mkdtemp(prefix=f".{output_root.name}.prepare-", dir=output_root.parent)
     )
     published = False
+    publication = None
     try:
         _write_files(staging_root, generated_files)
         _copy_and_verify_sources(source_root, staging_root, assets, images)
         _assert_source_set_unchanged(source_root, images)
         _write_design_lock(staging_root, design_version, source_set_hash)
         _assert_source_set_unchanged(source_root, images)
-        _publish_staging(staging_root, output_root, authorized_snapshot)
+        publication = _publish_staging(staging_root, output_root, authorized_snapshot)
+        try:
+            _assert_source_set_unchanged(source_root, images)
+        except RuntimeError as source_drift:
+            try:
+                _quarantine_after_source_drift(output_root, publication)
+            except (OSError, RuntimeError) as recovery_error:
+                raise RuntimeError(
+                    "post-publication source drift; recovery failed without deleting data"
+                ) from recovery_error
+            raise RuntimeError(
+                "post-publication source drift; generated package quarantined"
+            ) from source_drift
+        _finalize_publication(publication)
         published = True
     finally:
         if not published and staging_root.exists():
