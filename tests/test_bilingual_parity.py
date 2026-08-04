@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -24,11 +25,22 @@ def _load_parity_module():
     return module
 
 
-def _write_markdown(path, *, template_id=None, rules=(), sections=(), placeholders=(), images=()):
+def _write_markdown(
+    path,
+    *,
+    template_id=None,
+    rules=(),
+    sections=(),
+    placeholders=(),
+    images=(),
+    prose="",
+):
     lines = []
     if template_id is not None:
         lines.extend(("---", f"templateId: {template_id}", "---", ""))
     lines.append("# Document")
+    if prose:
+        lines.append(prose)
     for rule_id in rules:
         lines.append(f"ruleId: {rule_id}")
     for section_id in sections:
@@ -55,6 +67,7 @@ class BilingualParityTests(unittest.TestCase):
             sections=("authority",),
             placeholders=("authorityOrder",),
             images=("../../assets/P001.png",),
+            prose="中文说明保留视觉证据。",
         )
         _write_markdown(
             self.root / "assets/templates/docs/en/guide.template.md",
@@ -63,6 +76,7 @@ class BilingualParityTests(unittest.TestCase):
             sections=("authority",),
             placeholders=("authorityOrder",),
             images=("../../assets/P001.png",),
+            prose="English guidance preserves visible evidence.",
         )
         _write_markdown(
             self.root / "docs/zh/pages/P001-S01-V01-unclassified.md",
@@ -83,8 +97,33 @@ class BilingualParityTests(unittest.TestCase):
         parity = _load_parity_module()
         result = parity.check_bilingual_parity(self.root)
 
+        self.assertNotEqual(
+            (self.root / "assets/templates/docs/zh/guide.template.md").read_text(
+                encoding="utf-8"
+            ),
+            (self.root / "assets/templates/docs/en/guide.template.md").read_text(
+                encoding="utf-8"
+            ),
+        )
         self.assertEqual(result["status"], "passed")
         self.assertEqual(result["issues"], [])
+
+    def test_reports_missing_entire_language_directory_and_cli_failure(self):
+        self.make_valid_pair()
+        shutil.rmtree(self.root / "docs/en")
+
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT_PATH), "--handoff-root", str(self.root)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn(
+            "BILINGUAL_MISSING_LANGUAGE_DIRECTORY",
+            {issue["code"] for issue in json.loads(completed.stdout)["issues"]},
+        )
 
     def test_reports_missing_mirrored_file(self):
         self.make_valid_pair()
@@ -149,6 +188,32 @@ class BilingualParityTests(unittest.TestCase):
             "BILINGUAL_IMAGE_REFERENCE_MISMATCH",
             {issue["code"] for issue in json.loads(completed.stdout)["issues"]},
         )
+
+    def test_rejects_unsafe_matching_image_targets(self):
+        unsafe_targets = (
+            r"C:\\handoff\\design.png",
+            r"\\\\server\\share\\design.png",
+            "/assets/design.png",
+            "../../../../../outside.png",
+            "file:///assets/design.png",
+            "https://example.test/design.png",
+            "custom-scheme:design.png",
+        )
+        for target in unsafe_targets:
+            with self.subTest(target=target):
+                self.make_valid_pair()
+                for locale in ("zh", "en"):
+                    _write_markdown(
+                        self.root
+                        / f"assets/templates/docs/{locale}/guide.template.md",
+                        template_id="guide",
+                        rules=("R-1",),
+                        sections=("authority",),
+                        placeholders=("authorityOrder",),
+                        images=(target,),
+                    )
+
+                self.assertIn("BILINGUAL_INVALID_IMAGE_TARGET", self.issue_codes())
 
 
 if __name__ == "__main__":

@@ -13,6 +13,8 @@ RULE_ID_PATTERN = re.compile(r"^ruleId:\s*(\S+)\s*$", re.MULTILINE)
 SECTION_ID_PATTERN = re.compile(r"^sectionId:\s*(\S+)\s*$", re.MULTILINE)
 PLACEHOLDER_PATTERN = re.compile(r"\{\{\s*([^{}]+?)\s*\}\}")
 LINK_PATTERN = re.compile(r"!?\[[^\]]*\]\(\s*<?([^\s>)]+)>?")
+URI_SCHEME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
+WINDOWS_ABSOLUTE_PATTERN = re.compile(r"^[A-Za-z]:[\\/]|^\\\\")
 
 HANDOFF_DOCUMENT_KEYS = {
     "设计稿总目录.md": "handoff:design-catalog",
@@ -47,37 +49,65 @@ def _image_references(text: str) -> set[str]:
     return references
 
 
-def _document_details(path: Path, relative_path: Path) -> dict:
+def _is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def _invalid_image_references(root: Path, path: Path, references: set[str]) -> set[str]:
+    invalid = set()
+    for reference in references:
+        if (
+            reference.startswith(("/", "\\"))
+            or WINDOWS_ABSOLUTE_PATTERN.match(reference)
+            or URI_SCHEME_PATTERN.match(reference)
+        ):
+            invalid.add(reference)
+            continue
+        if not _is_within((path.parent / reference).resolve(), root):
+            invalid.add(reference)
+    return invalid
+
+
+def _document_details(path: Path, relative_path: Path, root: Path) -> dict:
     text = path.read_text(encoding="utf-8")
+    images = _image_references(text)
     return {
         "path": path,
         "key": _document_key(path, relative_path, text),
         "ruleIds": set(RULE_ID_PATTERN.findall(text)),
         "sectionIds": set(SECTION_ID_PATTERN.findall(text)),
         "placeholders": set(PLACEHOLDER_PATTERN.findall(text)),
-        "images": _image_references(text),
+        "images": images,
+        "invalidImages": _invalid_image_references(root, path, images),
     }
 
 
-def _documents(directory: Path) -> dict[str, dict]:
+def _documents(directory: Path, root: Path) -> dict[str, dict]:
     documents = {}
     for path in sorted(directory.rglob("*.md")):
         if not path.is_file():
             continue
-        document = _document_details(path, path.relative_to(directory))
+        document = _document_details(path, path.relative_to(directory), root)
         documents.setdefault(document["key"], document)
     return documents
 
 
 def _language_scopes(root: Path) -> list[tuple[Path, Path]]:
-    scopes = []
-    for zh_directory in root.rglob("zh"):
-        if not zh_directory.is_dir():
-            continue
-        en_directory = zh_directory.with_name("en")
-        if en_directory.is_dir():
-            scopes.append((zh_directory, en_directory))
-    return sorted(scopes, key=lambda scope: scope[0].as_posix())
+    parents = set()
+    for locale in ("zh", "en"):
+        parents.update(
+            directory.parent
+            for directory in root.rglob(locale)
+            if directory.is_dir()
+        )
+    return [
+        (parent / "zh", parent / "en")
+        for parent in sorted(parents, key=lambda path: path.as_posix())
+    ]
 
 
 def _compare_pair(scope: str, key: str, zh_document: dict, en_document: dict) -> list[dict]:
@@ -105,11 +135,34 @@ def check_bilingual_parity(root: Path) -> dict:
     """
 
     root = Path(root)
+    resolved_root = root.resolve()
     issues = []
     for zh_directory, en_directory in _language_scopes(root):
         scope = zh_directory.parent.relative_to(root).as_posix() or "."
-        zh_documents = _documents(zh_directory)
-        en_documents = _documents(en_directory)
+        if not zh_directory.is_dir() or not en_directory.is_dir():
+            issues.append(
+                _issue(
+                    "BILINGUAL_MISSING_LANGUAGE_DIRECTORY",
+                    scope,
+                    "locale-directory",
+                    missingLocale="zh-CN" if not zh_directory.is_dir() else "en-US",
+                )
+            )
+            continue
+        zh_documents = _documents(zh_directory, resolved_root)
+        en_documents = _documents(en_directory, resolved_root)
+        for locale, documents in (("zh-CN", zh_documents), ("en-US", en_documents)):
+            for document in documents.values():
+                if document["invalidImages"]:
+                    issues.append(
+                        _issue(
+                            "BILINGUAL_INVALID_IMAGE_TARGET",
+                            scope,
+                            document["key"],
+                            locale=locale,
+                            invalidTargets=sorted(document["invalidImages"]),
+                        )
+                    )
         for key in sorted(set(zh_documents) | set(en_documents)):
             zh_document = zh_documents.get(key)
             en_document = en_documents.get(key)
