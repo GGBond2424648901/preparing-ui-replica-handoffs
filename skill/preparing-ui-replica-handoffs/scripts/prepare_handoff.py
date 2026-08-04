@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import argparse
 import csv
+import ctypes
 import errno
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import re
 import secrets
 import shutil
+import sys
 import tempfile
 
 from jsonschema import Draft202012Validator, FormatChecker
@@ -26,6 +29,22 @@ FORMAT_DETAILS = {
 }
 CANONICAL_LOCALES = ("zh-CN", "en-US")
 DETERMINISTIC_GENERATED_AT = "1970-01-01T00:00:00Z"
+AT_FDCWD_LINUX = -100
+RENAME_NOREPLACE = 1
+RENAME_EXCL = 0x00000004
+NO_REPLACE_COLLISION_ERRNOS = frozenset(
+    {errno.EEXIST, errno.ENOTEMPTY, errno.ENOTDIR, errno.EISDIR}
+)
+NO_REPLACE_UNSUPPORTED_ERRNOS = frozenset(
+    value
+    for value in (
+        errno.EINVAL,
+        getattr(errno, "ENOSYS", None),
+        getattr(errno, "ENOTSUP", None),
+        getattr(errno, "EOPNOTSUPP", None),
+    )
+    if value is not None
+)
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_ROOT = SKILL_ROOT / "assets" / "templates"
 SCHEMA_ROOT = SKILL_ROOT / "assets" / "schemas"
@@ -39,6 +58,156 @@ SCHEMA_CONTRACTS = {
     "contracts/diff-regions.json": "diff-regions.schema.json",
     "contracts/design-lock.json": "design-lock.schema.json",
 }
+
+
+class _AtomicNoReplaceUnavailable(RuntimeError):
+    pass
+
+
+def _load_libc_function(name: str, argtypes: list[type]):
+    try:
+        library = ctypes.CDLL(None, use_errno=True)
+        function = getattr(library, name)
+    except (AttributeError, OSError) as error:
+        raise _AtomicNoReplaceUnavailable(
+            f"atomic no-replace directory move is unsupported: missing {name}"
+        ) from error
+    function.argtypes = argtypes
+    function.restype = ctypes.c_int
+    return function
+
+
+def _call_libc_rename(function, arguments: tuple, destination: Path) -> None:
+    ctypes.set_errno(0)
+    if function(*arguments) == 0:
+        return
+    error_number = ctypes.get_errno()
+    if error_number == 0:
+        raise RuntimeError("atomic no-replace directory move failed without errno")
+    raise OSError(error_number, os.strerror(error_number), os.fspath(destination))
+
+
+def _linux_atomic_no_replace_directory_move(
+    source: Path, destination: Path
+) -> None:
+    renameat2 = _load_libc_function(
+        "renameat2",
+        [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ],
+    )
+    _call_libc_rename(
+        renameat2,
+        (
+            AT_FDCWD_LINUX,
+            os.fsencode(source),
+            AT_FDCWD_LINUX,
+            os.fsencode(destination),
+            RENAME_NOREPLACE,
+        ),
+        destination,
+    )
+
+
+def _bsd_atomic_no_replace_directory_move(source: Path, destination: Path) -> None:
+    try:
+        renamex_np = _load_libc_function(
+            "renamex_np", [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+        )
+    except _AtomicNoReplaceUnavailable:
+        try:
+            renameatx_np = _load_libc_function(
+                "renameatx_np",
+                [
+                    ctypes.c_int,
+                    ctypes.c_char_p,
+                    ctypes.c_int,
+                    ctypes.c_char_p,
+                    ctypes.c_uint,
+                ],
+            )
+        except _AtomicNoReplaceUnavailable as renameatx_error:
+            raise _AtomicNoReplaceUnavailable(
+                "atomic no-replace directory move is unsupported: "
+                "missing renamex_np and renameatx_np"
+            ) from renameatx_error
+        _call_libc_rename(
+            renameatx_np,
+            (
+                0,
+                os.fsencode(os.path.abspath(source)),
+                0,
+                os.fsencode(os.path.abspath(destination)),
+                RENAME_EXCL,
+            ),
+            destination,
+        )
+        return
+    _call_libc_rename(
+        renamex_np,
+        (os.fsencode(source), os.fsencode(destination), RENAME_EXCL),
+        destination,
+    )
+
+
+def _atomic_no_replace_directory_move(source: Path, destination: Path) -> None:
+    if os.name == "nt":
+        os.rename(source, destination)
+        return
+    if sys.platform.startswith("linux"):
+        _linux_atomic_no_replace_directory_move(source, destination)
+        return
+    if sys.platform == "darwin" or sys.platform.startswith(
+        ("freebsd", "openbsd", "netbsd", "dragonfly")
+    ):
+        _bsd_atomic_no_replace_directory_move(source, destination)
+        return
+    raise _AtomicNoReplaceUnavailable(
+        f"atomic no-replace directory move is unsupported on {sys.platform}"
+    )
+
+
+def _remove_empty_probe_paths(paths: tuple[Path, ...]) -> None:
+    for path in paths:
+        try:
+            path.rmdir()
+        except OSError:
+            pass
+
+
+def _preflight_atomic_no_replace_directory_move(parent_root: Path) -> None:
+    probe_root = Path(
+        tempfile.mkdtemp(prefix=".handoff-no-replace-probe-", dir=parent_root)
+    )
+    source = probe_root / "source"
+    destination = probe_root / "destination"
+    source.mkdir()
+    destination.mkdir()
+    try:
+        try:
+            _atomic_no_replace_directory_move(source, destination)
+        except OSError as error:
+            if error.errno in NO_REPLACE_COLLISION_ERRNOS:
+                if source.is_dir() and destination.is_dir():
+                    return
+                raise RuntimeError(
+                    "atomic no-replace capability probe did not preserve directories"
+                ) from error
+            if error.errno in NO_REPLACE_UNSUPPORTED_ERRNOS:
+                raise _AtomicNoReplaceUnavailable(
+                    "atomic no-replace directory move is unsupported by the "
+                    "publication filesystem"
+                ) from error
+            raise
+        raise _AtomicNoReplaceUnavailable(
+            "atomic no-replace directory move replaced an existing directory"
+        )
+    finally:
+        _remove_empty_probe_paths((source, destination, probe_root))
 
 
 def sha256_file(path: Path) -> str:
@@ -1099,31 +1268,11 @@ def _move_to_unique_quarantine(output_root: Path, recovery_root: Path) -> Path:
             continue
         quarantine_root = reservation_root / "package"
         try:
-            quarantine_root.lstat()
-        except FileNotFoundError:
-            pass
-        except NotADirectoryError:
-            continue
-        else:
-            continue
-        try:
-            output_root.rename(quarantine_root)
-        except FileExistsError:
-            continue
+            _atomic_no_replace_directory_move(output_root, quarantine_root)
         except OSError as error:
-            if error.errno in {
-                errno.EEXIST,
-                errno.ENOTEMPTY,
-                errno.ENOTDIR,
-                errno.EISDIR,
-            }:
+            if error.errno in NO_REPLACE_COLLISION_ERRNOS:
                 continue
-            try:
-                quarantine_root.lstat()
-            except (FileNotFoundError, NotADirectoryError):
-                raise error
-            else:
-                continue
+            raise
         return quarantine_root
 
 
@@ -1174,6 +1323,7 @@ def prepare_handoff(
         return result
 
     output_root.parent.mkdir(parents=True, exist_ok=True)
+    _preflight_atomic_no_replace_directory_move(output_root.parent)
     staging_root = Path(
         tempfile.mkdtemp(prefix=f".{output_root.name}.prepare-", dir=output_root.parent)
     )

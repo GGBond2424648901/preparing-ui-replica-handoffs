@@ -1,4 +1,5 @@
 import csv
+import ctypes
 import errno
 import hashlib
 import json
@@ -6,6 +7,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import types
 import unittest
@@ -30,6 +32,96 @@ SCHEMA_ROOT = (
     / "assets"
     / "schemas"
 )
+
+
+class _FakeCFunction:
+    def __init__(self, result=0, error_number=0):
+        self.result = result
+        self.error_number = error_number
+        self.calls = []
+        self.argtypes = None
+        self.restype = None
+
+    def __call__(self, *arguments):
+        self.calls.append(arguments)
+        ctypes.set_errno(self.error_number)
+        return self.result
+
+
+POSIX_CHILD_EMPTY_DIRECTORY_RACE = r"""
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import types
+
+jsonschema = types.ModuleType("jsonschema")
+jsonschema.Draft202012Validator = object
+jsonschema.FormatChecker = object
+sys.modules["jsonschema"] = jsonschema
+pil = types.ModuleType("PIL")
+pil.Image = object
+pil.UnidentifiedImageError = ValueError
+sys.modules["PIL"] = pil
+
+script_path = Path(sys.argv[1])
+module = types.ModuleType("prepare_handoff_posix_race")
+module.__file__ = str(script_path)
+exec(compile(script_path.read_bytes(), str(script_path), "exec"), module.__dict__)
+
+with tempfile.TemporaryDirectory() as temporary_directory:
+    root = Path(temporary_directory)
+    output = root / "public-package"
+    recovery = root / "public-package.recovery"
+    output.mkdir()
+    recovery.mkdir()
+    (output / "owner.txt").write_text("public package", encoding="utf-8")
+
+    collision_token = "a" * 32
+    successful_token = "b" * 32
+    collision_package = recovery / f"quarantine-{collision_token}" / "package"
+    successful_package = recovery / f"quarantine-{successful_token}" / "package"
+    trigger = root / "trigger"
+    ready = root / "ready"
+    child_code = (
+        "import os, pathlib, sys, time; "
+        "target=pathlib.Path(sys.argv[1]); "
+        "trigger=pathlib.Path(sys.argv[2]); "
+        "ready=pathlib.Path(sys.argv[3]); "
+        "\nwhile not trigger.exists(): time.sleep(0.001); "
+        "\nos.mkdir(target); ready.write_text('ready')"
+    )
+    child = subprocess.Popen(
+        [sys.executable, "-B", "-c", child_code, str(collision_package), str(trigger), str(ready)]
+    )
+
+    real_atomic_move = module._atomic_no_replace_directory_move
+    first_call = True
+
+    def race_with_child(source, destination):
+        global first_call
+        if first_call:
+            first_call = False
+            trigger.write_text("go", encoding="utf-8")
+            child.wait(timeout=10)
+            if child.returncode != 0 or not ready.is_file():
+                raise RuntimeError("POSIX race child failed")
+        return real_atomic_move(source, destination)
+
+    tokens = iter((collision_token, successful_token))
+    module._atomic_no_replace_directory_move = race_with_child
+    module.secrets.token_hex = lambda _size: next(tokens)
+    moved = module._move_to_unique_quarantine(output, recovery)
+
+    assert moved == successful_package, moved
+    assert collision_package.is_dir()
+    assert list(collision_package.iterdir()) == []
+    assert not output.exists()
+    assert (successful_package / "owner.txt").read_text(encoding="utf-8") == "public package"
+
+print("POSIX child empty-directory race: passed")
+"""
 
 PREPARE_HANDOFF = types.ModuleType("prepare_handoff")
 PREPARE_HANDOFF.__file__ = str(SCRIPT_PATH)
@@ -125,6 +217,110 @@ class PrepareHandoffTests(unittest.TestCase):
         _write_image(jpeg, (4, 2), (80, 90, 100), "JPEG")
         (self.source / "notes.txt").write_text("not an image", encoding="utf-8")
         return duplicate, original, jpeg
+
+    def test_windows_atomic_no_replace_move_uses_os_rename(self):
+        source = self.root / "windows-source"
+        destination = self.root / "windows-destination"
+        collision = FileExistsError(errno.EEXIST, "destination exists")
+
+        with mock.patch.object(PREPARE_HANDOFF.os, "name", "nt"), mock.patch.object(
+            PREPARE_HANDOFF.os, "rename", side_effect=collision
+        ) as rename:
+            with self.assertRaises(FileExistsError) as error:
+                PREPARE_HANDOFF._atomic_no_replace_directory_move(
+                    source, destination
+                )
+
+        self.assertIs(error.exception, collision)
+        rename.assert_called_once_with(source, destination)
+
+    def test_linux_atomic_no_replace_move_uses_renameat2_noreplace(self):
+        source = self.root / "linux-source"
+        destination = self.root / "linux-destination"
+        renameat2 = _FakeCFunction(result=-1, error_number=errno.EEXIST)
+        library = types.SimpleNamespace(renameat2=renameat2)
+
+        with mock.patch.object(PREPARE_HANDOFF.os, "name", "posix"), mock.patch.object(
+            PREPARE_HANDOFF.sys, "platform", "linux"
+        ), mock.patch.object(PREPARE_HANDOFF.ctypes, "CDLL", return_value=library):
+            with self.assertRaises(FileExistsError) as error:
+                PREPARE_HANDOFF._atomic_no_replace_directory_move(
+                    source, destination
+                )
+
+        self.assertEqual(error.exception.errno, errno.EEXIST)
+        self.assertEqual(
+            renameat2.calls,
+            [
+                (
+                    PREPARE_HANDOFF.AT_FDCWD_LINUX,
+                    os.fsencode(source),
+                    PREPARE_HANDOFF.AT_FDCWD_LINUX,
+                    os.fsencode(destination),
+                    PREPARE_HANDOFF.RENAME_NOREPLACE,
+                )
+            ],
+        )
+
+    def test_bsd_atomic_no_replace_move_uses_renamex_np_excl(self):
+        source = self.root / "bsd-source"
+        destination = self.root / "bsd-destination"
+        renamex_np = _FakeCFunction()
+        library = types.SimpleNamespace(renamex_np=renamex_np)
+
+        with mock.patch.object(PREPARE_HANDOFF.os, "name", "posix"), mock.patch.object(
+            PREPARE_HANDOFF.sys, "platform", "darwin"
+        ), mock.patch.object(PREPARE_HANDOFF.ctypes, "CDLL", return_value=library):
+            PREPARE_HANDOFF._atomic_no_replace_directory_move(source, destination)
+
+        self.assertEqual(
+            renamex_np.calls,
+            [
+                (
+                    os.fsencode(source),
+                    os.fsencode(destination),
+                    PREPARE_HANDOFF.RENAME_EXCL,
+                )
+            ],
+        )
+
+    def test_unsupported_platform_never_falls_back_to_ordinary_rename(self):
+        source = self.root / "unsupported-source"
+        destination = self.root / "unsupported-destination"
+
+        with mock.patch.object(PREPARE_HANDOFF.os, "name", "posix"), mock.patch.object(
+            PREPARE_HANDOFF.sys, "platform", "sunos5"
+        ), mock.patch.object(PREPARE_HANDOFF.os, "rename") as ordinary_rename:
+            with self.assertRaisesRegex(RuntimeError, "atomic.*no-replace|unsupported"):
+                PREPARE_HANDOFF._atomic_no_replace_directory_move(
+                    source, destination
+                )
+
+        ordinary_rename.assert_not_called()
+
+    def test_unsupported_capability_fails_before_managed_publication(self):
+        image = self.source / "screen.png"
+        output = self.root / "managed-preflight"
+        _write_image(image, (2, 2), (10, 20, 30), "PNG")
+        PREPARE_HANDOFF.prepare_handoff(self.source, output, design_version="v1")
+        previous_bytes = _file_bytes(output)
+        _write_image(image, (3, 2), (30, 20, 10), "PNG")
+
+        with mock.patch.object(
+            PREPARE_HANDOFF,
+            "_preflight_atomic_no_replace_directory_move",
+            side_effect=RuntimeError("atomic no-replace unsupported"),
+        ) as preflight, mock.patch.object(
+            PREPARE_HANDOFF, "_publish_staging"
+        ) as publish:
+            with self.assertRaisesRegex(RuntimeError, "atomic.*unsupported"):
+                PREPARE_HANDOFF.prepare_handoff(
+                    self.source, output, design_version="v1", force=True
+                )
+
+        preflight.assert_called_once_with(output.parent)
+        publish.assert_not_called()
+        self.assertEqual(_file_bytes(output), previous_bytes)
 
     def assert_quarantine_reservation_collision_recovery(self, collision_kind):
         for managed_output in (False, True):
@@ -848,57 +1044,135 @@ class PrepareHandoffTests(unittest.TestCase):
     def test_symlink_quarantine_reservation_collision_survives_retry(self):
         self.assert_quarantine_reservation_collision_recovery("symlink")
 
-    def test_child_enotdir_collision_preserves_reservation_and_retries(self):
-        output = self.root / "enotdir-public-package"
-        recovery = output.with_name(output.name + ".recovery")
-        output.mkdir()
-        (output / "owner.txt").write_text("public package", encoding="utf-8")
-        recovery.mkdir()
-        collision_token = "a" * 32
-        successful_token = "b" * 32
-        collision_reservation = recovery / f"quarantine-{collision_token}"
-        successful_package = (
-            recovery / f"quarantine-{successful_token}" / "package"
-        )
-        real_rename = Path.rename
-        injected_targets = []
-
-        def raise_enotdir_after_child_collision(path, target):
-            target = Path(target)
-            if path == output and not injected_targets:
-                target.write_text("unexpected child data", encoding="utf-8")
-                injected_targets.append(target)
-                raise NotADirectoryError(
-                    errno.ENOTDIR, "simulated occupied regular-file target"
+    def test_child_collision_errnos_preserve_empty_directories_and_retry(self):
+        for collision_errno in (errno.EEXIST, errno.ENOTEMPTY, errno.ENOTDIR):
+            with self.subTest(collision_errno=collision_errno):
+                case_root = self.root / f"child-collision-{collision_errno}"
+                output = case_root / "public-package"
+                recovery = case_root / "public-package.recovery"
+                output.mkdir(parents=True)
+                recovery.mkdir()
+                (output / "owner.txt").write_text(
+                    "public package", encoding="utf-8"
                 )
-            return real_rename(path, target)
+                collision_token = "a" * 32
+                successful_token = "b" * 32
+                collision_child = (
+                    recovery / f"quarantine-{collision_token}" / "package"
+                )
+                successful_package = (
+                    recovery / f"quarantine-{successful_token}" / "package"
+                )
+                real_atomic_move = (
+                    PREPARE_HANDOFF._atomic_no_replace_directory_move
+                )
+                injected_inode = []
+
+                def collide_once_then_move(source, destination):
+                    destination = Path(destination)
+                    if not injected_inode:
+                        destination.mkdir()
+                        injected_inode.append(destination.stat().st_ino)
+                        raise OSError(collision_errno, "simulated child collision")
+                    return real_atomic_move(source, destination)
+
+                with mock.patch.object(
+                    PREPARE_HANDOFF,
+                    "_atomic_no_replace_directory_move",
+                    side_effect=collide_once_then_move,
+                ), mock.patch.object(
+                    PREPARE_HANDOFF.secrets,
+                    "token_hex",
+                    side_effect=(collision_token, successful_token),
+                ):
+                    quarantined_package = (
+                        PREPARE_HANDOFF._move_to_unique_quarantine(output, recovery)
+                    )
+
+                self.assertEqual(collision_child.stat().st_ino, injected_inode[0])
+                self.assertEqual(list(collision_child.iterdir()), [])
+                self.assertEqual(quarantined_package, successful_package)
+                self.assertFalse(output.exists())
+                self.assertEqual(
+                    (successful_package / "owner.txt").read_text(encoding="utf-8"),
+                    "public package",
+                )
+
+    def test_child_non_collision_error_is_propagated_without_retry(self):
+        output = self.root / "non-collision-public-package"
+        recovery = self.root / "non-collision-public-package.recovery"
+        output.mkdir()
+        recovery.mkdir()
+        (output / "owner.txt").write_text("public package", encoding="utf-8")
+        collision_token = "a" * 32
 
         with mock.patch.object(
-            Path,
-            "rename",
-            autospec=True,
-            side_effect=raise_enotdir_after_child_collision,
-        ), mock.patch.object(
+            PREPARE_HANDOFF,
+            "_atomic_no_replace_directory_move",
+            side_effect=OSError(errno.EXDEV, "cross-device move"),
+        ) as atomic_move, mock.patch.object(
             PREPARE_HANDOFF.secrets,
             "token_hex",
-            side_effect=(collision_token, successful_token),
-        ):
-            quarantined_package = PREPARE_HANDOFF._move_to_unique_quarantine(
-                output, recovery
-            )
+            return_value=collision_token,
+        ) as token_hex:
+            with self.assertRaises(OSError) as error:
+                PREPARE_HANDOFF._move_to_unique_quarantine(output, recovery)
 
-        collision_child = collision_reservation / "package"
-        self.assertEqual(injected_targets, [collision_child])
+        self.assertEqual(error.exception.errno, errno.EXDEV)
+        atomic_move.assert_called_once()
+        token_hex.assert_called_once_with(16)
+        self.assertTrue(output.is_dir())
         self.assertEqual(
-            collision_child.read_text(encoding="utf-8"),
-            "unexpected child data",
+            (output / "owner.txt").read_text(encoding="utf-8"), "public package"
         )
-        self.assertEqual(quarantined_package, successful_package)
-        self.assertFalse(output.exists())
+
+    @unittest.skipUnless(
+        os.name != "nt" or shutil.which("wsl.exe"),
+        "requires POSIX or WSL",
+    )
+    def test_posix_child_empty_directory_race_preserves_collision_and_retries(self):
+        if os.name == "nt":
+            converted_path = subprocess.run(
+                ["wsl.exe", "-e", "wslpath", "-a", str(SCRIPT_PATH)],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                encoding="utf-8",
+            ).stdout.strip()
+            command = [
+                "wsl.exe",
+                "-e",
+                "python3",
+                "-B",
+                "-c",
+                POSIX_CHILD_EMPTY_DIRECTORY_RACE,
+                converted_path,
+            ]
+        else:
+            command = [
+                sys.executable,
+                "-B",
+                "-c",
+                POSIX_CHILD_EMPTY_DIRECTORY_RACE,
+                str(SCRIPT_PATH),
+            ]
+
+        completed = subprocess.run(
+            command,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
+
         self.assertEqual(
-            (successful_package / "owner.txt").read_text(encoding="utf-8"),
-            "public package",
+            completed.returncode,
+            0,
+            f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}",
         )
+        self.assertIn("POSIX child empty-directory race: passed", completed.stdout)
 
     def test_unique_quarantine_collision_retries_without_overwriting_owner_data(self):
         image = self.source / "screen.png"
