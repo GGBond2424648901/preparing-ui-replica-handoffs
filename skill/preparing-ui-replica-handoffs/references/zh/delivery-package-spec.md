@@ -99,4 +99,3 @@ ruleId: DP-015
 ruleId: DP-016
 
 若仍有未知项，交付包仍可作为“初始交付”提供，但必须在 README 和 validation report 明确写 incomplete/failed、列出 `gapId` 和下一步；禁止使用“已完全还原”“无需推断”等声明。
-

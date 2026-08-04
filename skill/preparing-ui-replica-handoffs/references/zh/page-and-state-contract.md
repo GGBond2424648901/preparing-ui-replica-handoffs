@@ -91,4 +91,3 @@ sectionId: page-acceptance
 ruleId: PS-015
 
 逐页合同必须覆盖身份、来源、画布、Shell、区域、布局、组件、文案、图标、数据、交互、状态、响应式、实现映射、QA 与缺口。缺少任何一项时状态是 incomplete，不得写“无需推断”。
-

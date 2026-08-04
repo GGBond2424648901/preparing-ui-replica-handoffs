@@ -6,9 +6,13 @@
 
 用户提供 UI 设计稿图片、截图、Figma 导出图或 AI 生成稿后，Skill 将其整理为中英双语、机器可读、可冻结、可验证的 UI 复刻交付包，使后续开发 Agent 能在明确证据边界内实施页面，而不需要自行猜测页面、状态、布局、文案、组件、路由、交互或验收规则。
 
-安装位置：`C:\Users\PC\.codex\skills\preparing-ui-replica-handoffs`。
+最终分发形态为个人 Codex 插件，插件内只携带本 Skill，不增加 MCP、App 或 Hook。
 
-可分发备份：`D:\AI_Demo\Result\preparing-ui-replica-handoffs.zip`。
+插件源码/安装位置：`C:\Users\PC\plugins\preparing-ui-replica-handoffs`。
+
+个人 marketplace：`C:\Users\PC\.agents\plugins\marketplace.json`。
+
+可分发备份：`D:\AI_Demo\Result\preparing-ui-replica-handoffs-plugin.zip`。
 
 ## 2. 非目标
 
@@ -225,4 +229,7 @@ ui-replica-handoff/
 - 模板和 Schema 能覆盖原图、页面、状态、变体、组件、文案、数据、布局、交互、响应式、环境、Diff、Git 范围和缺口审批。
 - 真实 16 图样例可生成完整初始交付包，现有源图和原交付包哈希不变。
 - 前向测试 Agent 按统一结构执行，不依赖任何外部 UI 复刻 Skill。
-- ZIP 与安装目录内容一致。
+- 插件包含有效的 `.codex-plugin/plugin.json`，其 `skills` 指向内置的 `./skills/`，不声明不存在的 MCP、App 或 Hook。
+- 个人 marketplace 以追加方式登记本插件，不修改已有插件条目。
+- 插件通过官方插件校验，内置 Skill 通过官方 Skill 校验。
+- ZIP 与个人插件安装目录内容一致。

@@ -204,4 +204,23 @@ python skill\preparing-ui-replica-handoffs\scripts\check_bilingual_parity.py --s
 git status --short --branch
 ```
 
-The task is complete only when these commands pass, the real read-only forward test leaves source hashes unchanged, the installed skill is discoverable, and the ZIP content matches the installed skill.
+## Task 9: Convert the verified skill into a personal Codex plugin
+
+**Files:**
+
+- Create: `plugin/preparing-ui-replica-handoffs/.codex-plugin/plugin.json`
+- Create: `plugin/preparing-ui-replica-handoffs/skills/preparing-ui-replica-handoffs/`
+- Create: `tests/test_plugin_package.py`
+- Install: `C:/Users/PC/plugins/preparing-ui-replica-handoffs/`
+- Update through official scaffold flow: `C:/Users/PC/.agents/plugins/marketplace.json`
+- Package: `D:/AI_Demo/Result/preparing-ui-replica-handoffs-plugin.zip`
+
+- [ ] Write failing tests for plugin manifest identity, semver, bilingual metadata, `skills: "./skills/"`, absence of undeclared MCP/App/Hook fields, and byte parity between repository Skill and plugin-contained Skill.
+- [ ] Scaffold with the official `plugin-creator/scripts/create_basic_plugin.py` using `--with-skills --with-marketplace`; do not hand-edit marketplace JSON.
+- [ ] Replace only the generated placeholder skill directory with the verified repository Skill.
+- [ ] Validate the plugin and its contained Skill using the official validators in UTF-8 mode.
+- [ ] Install/reinstall with `codex plugin add preparing-ui-replica-handoffs@personal` and verify with `codex plugin list`.
+- [ ] Build the ZIP from the installed plugin and compare every relative file path and SHA-256 with the repository plugin package.
+- [ ] Confirm the existing `design-image-to-web-replica` marketplace entry and source remain unchanged.
+
+The task is complete only when all commands pass, the real read-only forward test leaves source hashes unchanged, the plugin is discoverable through the personal marketplace, and the ZIP content matches the installed plugin.
