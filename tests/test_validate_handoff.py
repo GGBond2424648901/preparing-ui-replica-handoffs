@@ -75,6 +75,135 @@ def _record_set_hash(records):
     return digest.hexdigest()
 
 
+SECTION_CONTRACT_FIELDS = {
+    "identity-and-evidence": (
+        "pageId",
+        "stateId",
+        "variantId",
+        "sourceAssetIds",
+        "route",
+        "evidenceLevel",
+        "status",
+    ),
+    "canvas-shell-regions": ("canvas", "shell", "regions"),
+    "layout-copy-icons-data": ("layoutRelationships", "copy", "icons", "data"),
+    "components-interactions-responsive": (
+        "components",
+        "interactions",
+        "responsiveVariants",
+    ),
+    "qa-and-gaps": ("acceptanceCriteria", "gapIds"),
+}
+
+
+def _contract_hash(page, section_id):
+    subset = {field: page.get(field) for field in SECTION_CONTRACT_FIELDS[section_id]}
+    canonical = json.dumps(
+        subset, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+
+def _write_complete_page_documents(handoff, page, registry):
+    identity = f"{page['pageId']}-{page['stateId']}-{page['variantId']}"
+    source_link = next(
+        asset["deliveryRelativePath"]
+        for asset in _read_json(handoff / "contracts" / "asset-manifest.json")["assets"]
+        if asset["assetId"] == page["sourceAssetIds"][0]
+    )
+    component_names = {
+        component["componentId"]: component["name"]
+        for component in registry["components"]
+    }
+    for locale, locale_code in (("zh", "zh-CN"), ("en", "en-US")):
+        path = next((handoff / "docs" / locale / "pages").glob(f"{identity}-*.md"))
+        if locale == "zh":
+            prose = {
+                "identity-and-evidence": "本节确认页面身份、设计来源与批准状态，所有实施工作都必须追溯到列出的原始设计资产和固定路由证据。",
+                "canvas-shell-regions": "本节定义原生画布、应用外壳和完整区域边界；开发时保持坐标、尺寸、滚动方式与区域层级关系不变。",
+                "layout-copy-icons-data": "本节记录布局关系、可见文案、图标语义和数据形状；每一项均按设计证据实现并用于逐项视觉验收。",
+                "components-interactions-responsive": "本节约束组件实例、交互结果和响应式变体；实现必须使用登记组件并准确复现声明的用户操作结果。",
+                "qa-and-gaps": "本节列出可执行验收标准和已解析缺口；页面只有在全部证据检查通过且缺口有明确结论后才能交付。",
+            }
+        else:
+            prose = {
+                "identity-and-evidence": "This section binds the page identity, approved status, route, and original design assets so every implementation decision remains traceable.",
+                "canvas-shell-regions": "This section defines the native canvas, application shell, and complete region boundaries, including dimensions, hierarchy, and scrolling behavior.",
+                "layout-copy-icons-data": "This section records layout relationships, visible copy, icon meaning, and data shapes that must be implemented and visually verified item by item.",
+                "components-interactions-responsive": "This section contracts component instances, interaction outcomes, and responsive variants so registered components reproduce every declared behavior accurately.",
+                "qa-and-gaps": "This section lists executable acceptance criteria and resolved gaps; delivery is allowed only when all bound evidence checks pass without ambiguity.",
+            }
+        section_values = {
+            "identity-and-evidence": [
+                identity,
+                *page["sourceAssetIds"],
+                page["route"]["path"],
+            ],
+            "canvas-shell-regions": [
+                page["shell"]["shellId"],
+                *(region["regionId"] for region in page["regions"]),
+            ],
+            "layout-copy-icons-data": [
+                *(item["relationshipId"] for item in page["layoutRelationships"]),
+                *(item["copyId"] for item in page["copy"]),
+                *(item["text"][locale_code] for item in page["copy"]),
+                *(item["iconId"] for item in page["icons"]),
+                *(item["dataId"] for item in page["data"]),
+                *(item["valueShape"] for item in page["data"]),
+            ],
+            "components-interactions-responsive": [
+                *(item["instanceId"] for item in page["components"]),
+                *(item["componentId"] for item in page["components"]),
+                *(
+                    component_names[item["componentId"]][locale_code]
+                    for item in page["components"]
+                ),
+                *(item["interactionId"] for item in page["interactions"]),
+                *(item["outcome"][locale_code] for item in page["interactions"]),
+                *(item["responsiveVariantId"] for item in page["responsiveVariants"]),
+            ],
+            "qa-and-gaps": [
+                *(item["qaId"] for item in page["acceptanceCriteria"]),
+                *page["gapIds"],
+            ],
+        }
+        for field in ("layoutRelationships", "copy", "icons", "data"):
+            if not page[field]:
+                section_values["layout-copy-icons-data"].append(f"[absence:{field}]")
+        for field in ("components", "interactions"):
+            if not page[field]:
+                section_values["components-interactions-responsive"].append(
+                    f"[absence:{field}]"
+                )
+        lines = [
+            "---",
+            "templateId: page-contract",
+            f"locale: {locale_code}",
+            "---",
+            "",
+            f"# Page Contract: {identity}",
+            "",
+        ]
+        for section_id, values in section_values.items():
+            body = " ".join(f"`{value}`" for value in values)
+            if section_id == "identity-and-evidence":
+                body += f" [design](../../../{source_link})"
+            lines.extend(
+                [
+                    f"sectionId: {section_id}",
+                    f"contractHash: {_contract_hash(page, section_id)}",
+                    "",
+                    f"## {section_id}",
+                    "",
+                    prose[section_id],
+                    "",
+                    body,
+                    "",
+                ]
+            )
+        path.write_text("\n".join(lines), encoding="utf-8")
+
+
 def _create_directory_link(link, target):
     try:
         link.symlink_to(target, target_is_directory=True)
@@ -174,17 +303,24 @@ def _write_passing_qa_evidence(handoff, row, page, requirement_id, mapping):
                 "status": "pass",
                 "requirementId": requirement_id,
             },
+        ]
+        checks.extend(
             {
                 "checkType": "region-map",
                 "status": "pass",
-                "regionId": page["regions"][0]["regionId"],
-            },
+                "regionId": region["regionId"],
+            }
+            for region in page["regions"]
+        )
+        checks.extend(
             {
                 "checkType": "component-map",
                 "status": "pass",
-                "componentId": page["components"][0]["componentId"],
-            },
-        ]
+                "instanceId": component["instanceId"],
+                "componentId": component["componentId"],
+            }
+            for component in page["components"]
+        )
     else:
         checks = [
             {
@@ -227,11 +363,24 @@ def _write_passing_qa_evidence(handoff, row, page, requirement_id, mapping):
             "stateId": row["stateId"],
             "variantId": row["variantId"],
             "nodes": [
-                {
-                    "nodeId": "node-card",
-                    "regionId": page["regions"][0]["regionId"],
-                    "componentId": page["components"][0]["componentId"],
-                }
+                *(
+                    {
+                        "nodeId": f"node-region-{region['regionId']}",
+                        "nodeType": "region",
+                        "regionId": region["regionId"],
+                    }
+                    for region in page["regions"]
+                ),
+                *(
+                    {
+                        "nodeId": f"node-component-{component['instanceId']}",
+                        "nodeType": "component",
+                        "regionId": component["regionId"],
+                        "instanceId": component["instanceId"],
+                        "componentId": component["componentId"],
+                    }
+                    for component in page["components"]
+                ),
             ],
         }
         _write_json(handoff / dom_path, dom_snapshot)
@@ -247,6 +396,8 @@ def _write_passing_qa_evidence(handoff, row, page, requirement_id, mapping):
                 }
                 for target_file in mapping["targetFiles"]
             ],
+            "regionMappings": mapping["regionMappings"],
+            "componentMappings": mapping["componentMappings"],
         }
         _write_json(handoff / implementation_path, implementation_snapshot)
         runner["artifacts"].update(
@@ -261,6 +412,7 @@ def _write_passing_qa_evidence(handoff, row, page, requirement_id, mapping):
                 },
             }
         )
+        runner["requirementMappings"] = [requirement_id]
     else:
         test_cases = [
             {
@@ -342,6 +494,23 @@ def _rewrite_runner(handoff, evidence_type, mutate):
     _write_csv(qa_path, rows, list(rows[0]))
     _refresh_design_lock(handoff)
     return row, record, runner
+
+
+def _rewrite_structural_bundle(handoff, mutate):
+    def update(runner, record, row):
+        dom_metadata = runner["artifacts"]["domSnapshot"]
+        implementation_metadata = runner["artifacts"]["implementationSnapshot"]
+        dom_path = handoff / dom_metadata["path"]
+        implementation_path = handoff / implementation_metadata["path"]
+        dom = _read_json(dom_path)
+        implementation = _read_json(implementation_path)
+        mutate(runner, record, row, dom, implementation)
+        _write_json(dom_path, dom)
+        _write_json(implementation_path, implementation)
+        dom_metadata["sha256"] = _sha256(dom_path)
+        implementation_metadata["sha256"] = _sha256(implementation_path)
+
+    return _rewrite_runner(handoff, "structural", update)
 
 
 def _rewrite_page_section(path, section_id, transform):
@@ -546,61 +715,7 @@ def _resolve_generated_skeleton(handoff):
         mapping["pageId"]: mapping for mapping in implementation["mappings"]
     }
     for page in page_inventory["pages"]:
-        identity = f"{page['pageId']}-{page['stateId']}-{page['variantId']}"
-        source_link = next(
-            asset["deliveryRelativePath"]
-            for asset in _read_json(handoff / "contracts" / "asset-manifest.json")["assets"]
-            if asset["assetId"] == page["sourceAssetIds"][0]
-        )
-        section_values = {
-            "identity-and-evidence": [identity, *page["sourceAssetIds"]],
-            "canvas-shell-regions": [
-                page["shell"]["shellId"],
-                *(region["regionId"] for region in page["regions"]),
-            ],
-            "layout-copy-icons-data": [
-                *(item["relationshipId"] for item in page["layoutRelationships"]),
-                *(item["copyId"] for item in page["copy"]),
-                *(item["iconId"] for item in page["icons"]),
-                *(item["dataId"] for item in page["data"]),
-            ],
-            "components-interactions-responsive": [
-                *(item["instanceId"] for item in page["components"]),
-                *(item["componentId"] for item in page["components"]),
-                *(item["interactionId"] for item in page["interactions"]),
-                *(item["responsiveVariantId"] for item in page["responsiveVariants"]),
-            ],
-            "qa-and-gaps": [
-                *(item["qaId"] for item in page["acceptanceCriteria"]),
-                *page["gapIds"],
-            ],
-        }
-        for locale, locale_code in (("zh", "zh-CN"), ("en", "en-US")):
-            path = next((handoff / "docs" / locale / "pages").glob(f"{identity}-*.md"))
-            lines = [
-                "---",
-                "templateId: page-contract",
-                f"locale: {locale_code}",
-                "---",
-                "",
-                f"# Page Contract: {identity}",
-                "",
-            ]
-            for section_id, values in section_values.items():
-                body = " ".join(f"`{value}`" for value in values)
-                if section_id == "identity-and-evidence":
-                    body += f" [design](../../../{source_link})"
-                lines.extend(
-                    [
-                        f"sectionId: {section_id}",
-                        "",
-                        f"## {section_id}",
-                        "",
-                        body,
-                        "",
-                    ]
-                )
-            path.write_text("\n".join(lines), encoding="utf-8")
+        _write_complete_page_documents(handoff, page, registry)
 
     capture_path = handoff / "contracts" / "capture-profile.json"
     capture = _read_json(capture_path)
@@ -690,40 +805,70 @@ class ValidateHandoffTests(unittest.TestCase):
         gaps[0]["status"] = "resolved"
         gaps[0]["resolution"] = f"Reviewed visual evidence [absence:{field}]"
         _write_csv(gap_path, gaps, list(gaps[0]))
-        identity = f"{page['pageId']}-{page['stateId']}-{page['variantId']}"
-        for locale in ("zh", "en"):
-            document = next(
-                (self.handoff / "docs" / locale / "pages").glob(f"{identity}-*.md")
-            )
+        implementation_path = self.handoff / "contracts" / "implementation-map.json"
+        implementation = _read_json(implementation_path)
+        mapping = implementation["mappings"][0]
+        if field == "components":
+            mapping["componentMappings"] = []
+        elif field == "interactions":
+            mapping["interactionMappings"] = []
+        _write_json(implementation_path, implementation)
 
-            def replace_ids(body):
-                for identifier in removed_ids:
-                    body = body.replace(f"`{identifier}`", "")
-                return body + f"\n`[absence:{field}]`\n"
+        registry = _read_json(self.handoff / "contracts" / "component-registry.json")
+        _write_complete_page_documents(self.handoff, page, registry)
 
-            _rewrite_page_section(document, section_id, replace_ids)
-            _rewrite_page_section(
-                document,
-                "qa-and-gaps",
-                lambda body: body + "\n`G001`\n",
-            )
+        if field == "components":
+            def remove_components(runner, record, _row, dom, implementation_snapshot):
+                absence = {
+                    "checkType": "absence-check",
+                    "field": "components",
+                    "gapId": "G001",
+                    "actualInstanceIds": [],
+                    "actualComponentIds": [],
+                    "status": "pass",
+                }
+                runner["assertions"] = [
+                    assertion
+                    for assertion in runner["assertions"]
+                    if assertion["checkType"] != "component-map"
+                ] + [absence]
+                record["checks"] = [
+                    check
+                    for check in record["checks"]
+                    if check["checkType"] != "component-map"
+                ] + [absence]
+                dom["nodes"] = [
+                    node for node in dom["nodes"] if node["nodeType"] != "component"
+                ]
+                implementation_snapshot["componentMappings"] = []
+
+            _rewrite_structural_bundle(self.handoff, remove_components)
+        elif field == "interactions":
+            def remove_interactions(runner, record, _row):
+                absence = {
+                    "checkType": "absence-check",
+                    "field": "interactions",
+                    "gapId": "G001",
+                    "actualInteractionIds": [],
+                    "actualCaseCount": 0,
+                    "status": "pass",
+                }
+                runner["assertions"] = [absence]
+                record["checks"] = [absence]
+                runner["testCases"] = []
+                result_metadata = runner["artifacts"]["interactionResult"]
+                result_path = self.handoff / result_metadata["path"]
+                result = _read_json(result_path)
+                result["testCases"] = []
+                _write_json(result_path, result)
+                result_metadata["sha256"] = _sha256(result_path)
+
+            _rewrite_runner(self.handoff, "interaction", remove_interactions)
         _refresh_design_lock(self.handoff)
 
         result = self.validate(source_root=self.source)
-        semantic_issues = [
-            issue
-            for issue in result["issues"]
-            if issue["code"] == "APPROVED_PAGE_SUBSTANTIVE_FIELD_EMPTY"
-            and issue.get("field") == field
-        ]
-        section_issues = [
-            issue
-            for issue in result["issues"]
-            if issue["code"] == "PAGE_DOCUMENT_SECTION_REFERENCE_MISSING"
-            and issue.get("field") == field
-        ]
-        self.assertEqual(semantic_issues, [], result["issues"])
-        self.assertEqual(section_issues, [], result["issues"])
+        self.assertEqual(result["status"], "passed", result["issues"])
+        self.assertEqual(result["issues"], [])
 
     def test_accepts_complete_package_and_exposes_computed_lock_material(self):
         result = self.validate(source_root=self.source)
@@ -792,6 +937,171 @@ class ValidateHandoffTests(unittest.TestCase):
             self.codes(self.validate(source_root=self.source)),
         )
 
+    def test_approved_page_requires_correct_contract_hash_in_every_section(self):
+        page = _read_json(self.handoff / "contracts" / "page-inventory.json")["pages"][0]
+        identity = f"{page['pageId']}-{page['stateId']}-{page['variantId']}"
+        document = next((self.handoff / "docs" / "en" / "pages").glob(f"{identity}-*.md"))
+        _rewrite_page_section(
+            document,
+            "canvas-shell-regions",
+            lambda body: re.sub(
+                r"contractHash:\s*sha256:[0-9a-f]{64}",
+                "contractHash: sha256:" + "0" * 64,
+                body,
+            ),
+        )
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "PAGE_DOCUMENT_CONTRACT_HASH_MISMATCH",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_approved_page_section_requires_meaningful_locale_prose(self):
+        page = _read_json(self.handoff / "contracts" / "page-inventory.json")["pages"][0]
+        identity = f"{page['pageId']}-{page['stateId']}-{page['variantId']}"
+        document = next((self.handoff / "docs" / "en" / "pages").glob(f"{identity}-*.md"))
+
+        def remove_prose(body):
+            return "\n".join(
+                line
+                for line in body.splitlines()
+                if "contractHash:" in line or "`" in line or line.startswith("##")
+            ) + "\n"
+
+        _rewrite_page_section(document, "layout-copy-icons-data", remove_prose)
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "PAGE_DOCUMENT_SECTION_PROSE_INSUFFICIENT",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_page_document_requires_localized_copy_and_value_shape(self):
+        page = _read_json(self.handoff / "contracts" / "page-inventory.json")["pages"][0]
+        identity = f"{page['pageId']}-{page['stateId']}-{page['variantId']}"
+        document = next((self.handoff / "docs" / "en" / "pages").glob(f"{identity}-*.md"))
+        _rewrite_page_section(
+            document,
+            "layout-copy-icons-data",
+            lambda body: body.replace("`Sample title`", "").replace("`localized-title`", ""),
+        )
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "PAGE_DOCUMENT_LOCALIZED_CONTENT_MISSING",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_page_document_requires_localized_behavior_names_and_outcomes(self):
+        page = _read_json(self.handoff / "contracts" / "page-inventory.json")["pages"][0]
+        identity = f"{page['pageId']}-{page['stateId']}-{page['variantId']}"
+        document = next((self.handoff / "docs" / "en" / "pages").glob(f"{identity}-*.md"))
+        _rewrite_page_section(
+            document,
+            "components-interactions-responsive",
+            lambda body: body.replace("`Sample card`", "").replace("`Open details`", ""),
+        )
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "PAGE_DOCUMENT_LOCALIZED_CONTENT_MISSING",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_structural_dom_requires_exact_typed_region_and_component_coverage(self):
+        def mutate(_runner, _record, _row, dom, _implementation):
+            dom["nodes"].append(
+                {"nodeId": "extra-region", "nodeType": "region", "regionId": "region-extra"}
+            )
+
+        _rewrite_structural_bundle(self.handoff, mutate)
+
+        self.assertIn(
+            "QA_STRUCTURAL_DOM_COVERAGE_MISMATCH",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_structural_implementation_snapshot_rejects_duplicate_mapping(self):
+        def mutate(_runner, _record, _row, _dom, implementation):
+            implementation["regionMappings"].append(dict(implementation["regionMappings"][0]))
+
+        _rewrite_structural_bundle(self.handoff, mutate)
+
+        self.assertIn(
+            "QA_STRUCTURAL_IMPLEMENTATION_MAPPING_MISMATCH",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_structural_corrupt_mapping_shapes_fail_closed_without_crashing(self):
+        def mutate(runner, _record, _row, dom, implementation):
+            dom["nodes"][0]["regionId"] = {"forged": True}
+            implementation["regionMappings"][0]["regionId"] = {"forged": True}
+            runner["requirementMappings"] = [{"forged": True}]
+
+        _rewrite_structural_bundle(self.handoff, mutate)
+
+        result = self.validate(source_root=self.source)
+        codes = self.codes(result)
+
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("QA_STRUCTURAL_DOM_COVERAGE_MISMATCH", codes)
+        self.assertIn("QA_STRUCTURAL_IMPLEMENTATION_MAPPING_MISMATCH", codes)
+        self.assertIn("QA_STRUCTURAL_REQUIREMENT_COVERAGE_MISMATCH", codes)
+
+    def test_structural_runner_requires_exact_requirement_and_assertion_coverage(self):
+        def mutate(runner, _record, _row):
+            runner["requirementMappings"].append("R999")
+            runner["assertions"] = [
+                assertion
+                for assertion in runner["assertions"]
+                if assertion["checkType"] != "region-map"
+            ]
+
+        _rewrite_runner(self.handoff, "structural", mutate)
+        codes = self.codes(self.validate(source_root=self.source))
+
+        self.assertIn("QA_STRUCTURAL_REQUIREMENT_COVERAGE_MISMATCH", codes)
+        self.assertIn("QA_STRUCTURAL_RUNNER_ASSERTIONS_INVALID", codes)
+
+    def test_approved_implementation_map_rejects_missing_region_mapping(self):
+        path = self.handoff / "contracts" / "implementation-map.json"
+        implementation = _read_json(path)
+        implementation["mappings"][0]["regionMappings"] = []
+        _write_json(path, implementation)
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "IMPLEMENTATION_MAPPING_COVERAGE_MISMATCH",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_approved_implementation_map_rejects_duplicate_component_mapping(self):
+        path = self.handoff / "contracts" / "implementation-map.json"
+        implementation = _read_json(path)
+        component_mapping = implementation["mappings"][0]["componentMappings"][0]
+        implementation["mappings"][0]["componentMappings"].append(
+            dict(component_mapping)
+        )
+        _write_json(path, implementation)
+        _refresh_design_lock(self.handoff)
+
+        self.assertIn(
+            "IMPLEMENTATION_MAPPING_COVERAGE_MISMATCH",
+            self.codes(self.validate(source_root=self.source)),
+        )
+
+    def test_structural_assertions_reject_duplicate_entity(self):
+        def mutate(runner, record, _row):
+            runner["assertions"].append(dict(runner["assertions"][0]))
+            record["checks"].append(dict(record["checks"][0]))
+
+        _rewrite_runner(self.handoff, "structural", mutate)
+        codes = self.codes(self.validate(source_root=self.source))
+
+        self.assertIn("QA_STRUCTURAL_RUNNER_ASSERTIONS_INVALID", codes)
+        self.assertIn("QA_STRUCTURAL_CHECK_COVERAGE_MISSING", codes)
+
     def test_reports_approved_page_with_empty_substantive_contract(self):
         path = self.handoff / "contracts" / "page-inventory.json"
         inventory = _read_json(path)
@@ -858,6 +1168,46 @@ class ValidateHandoffTests(unittest.TestCase):
             "components-interactions-responsive",
             ("interactionId",),
         )
+
+    def test_component_absence_requires_verified_runner_and_record_assertion(self):
+        self.assert_absence_marker_accepted(
+            "components",
+            "components-interactions-responsive",
+            ("instanceId", "componentId"),
+        )
+
+        def remove_absence(runner, record, _row):
+            runner["assertions"] = [
+                assertion
+                for assertion in runner["assertions"]
+                if assertion["checkType"] != "absence-check"
+            ]
+            record["checks"] = [
+                check for check in record["checks"] if check["checkType"] != "absence-check"
+            ]
+
+        _rewrite_runner(self.handoff, "structural", remove_absence)
+        codes = self.codes(self.validate(source_root=self.source))
+
+        self.assertIn("QA_STRUCTURAL_RUNNER_ASSERTIONS_INVALID", codes)
+        self.assertIn("QA_STRUCTURAL_CHECK_COVERAGE_MISSING", codes)
+
+    def test_interaction_absence_requires_verified_zero_case_assertion(self):
+        self.assert_absence_marker_accepted(
+            "interactions",
+            "components-interactions-responsive",
+            ("interactionId",),
+        )
+
+        def remove_absence(runner, record, _row):
+            runner["assertions"] = []
+            record["checks"] = []
+
+        _rewrite_runner(self.handoff, "interaction", remove_absence)
+        codes = self.codes(self.validate(source_root=self.source))
+
+        self.assertIn("QA_INTERACTION_TEST_CASES_INVALID", codes)
+        self.assertIn("QA_INTERACTION_CHECK_REQUIRED", codes)
 
     def test_rejects_absence_marker_for_a_different_empty_field(self):
         inventory_path = self.handoff / "contracts" / "page-inventory.json"
