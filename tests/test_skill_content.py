@@ -29,6 +29,37 @@ class SkillContentTests(unittest.TestCase):
         self.assertIn("check_bilingual_parity.py", content)
         self.assertIn("validate_handoff.py", content)
 
+    def test_skill_keeps_the_canonical_package_shape_at_the_entry_point(self):
+        content = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+
+        for path in (
+            "assets/designs/<design-version>/",
+            "docs/zh/",
+            "docs/en/",
+            "contracts/requirement-ledger.csv",
+            "contracts/gap-register.csv",
+            "contracts/asset-manifest.json",
+            "contracts/page-inventory.json",
+            "contracts/ui-style-contract.json",
+            "contracts/component-registry.json",
+            "contracts/implementation-map.json",
+            "contracts/capture-profile.json",
+            "contracts/diff-regions.json",
+            "contracts/visual-qa-matrix.csv",
+            "contracts/design-lock.json",
+            "reports/contact-sheet.png",
+            "reports/validation-report.json",
+            "tools/validate-command.txt",
+        ):
+            self.assertIn(path, content)
+
+        for alien in (".design-replica/", "schema-v4", "capture-jobs.json"):
+            self.assertNotIn(alien, content)
+
+        self.assertIn("only before freezing", content)
+        self.assertIn("冻结前", content)
+        self.assertIn("immutable", content)
+
     def test_skill_is_independent_and_forbids_source_and_git_mutation(self):
         content = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
 
