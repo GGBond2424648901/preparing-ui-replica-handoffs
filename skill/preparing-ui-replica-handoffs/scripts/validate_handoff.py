@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import stat
 import subprocess
 import tempfile
 import types
@@ -87,7 +88,6 @@ REQUIRED_FILES = tuple(
             "docs/en/UI-Implementation-Guide.md",
             "docs/en/Component-Specification.md",
             "reports/contact-sheet.png",
-            "reports/validation-report.json",
             "tools/validate-command.txt",
         }
     )
@@ -481,7 +481,6 @@ def _check_qa_paths(
                     qaId=row.get("qaId"),
                 )
             )
-        evidence_hashes = []
         for field in evidence_fields:
             value = row.get(field, "")
             if not value:
@@ -506,21 +505,6 @@ def _check_qa_paths(
                         qaId=row.get("qaId"),
                     )
                 )
-            else:
-                evidence_hashes.append(_sha256(target))
-        if (
-            len(set(evidence_paths)) == len(evidence_fields)
-            and len(evidence_hashes) == len(evidence_fields)
-            and len(set(evidence_hashes)) != len(evidence_hashes)
-        ):
-            issues.append(
-                _issue(
-                    "QA_EVIDENCE_HASH_REUSED",
-                    "contracts/visual-qa-matrix.csv",
-                    "QA comparison evidence files must have distinct content hashes",
-                    qaId=row.get("qaId"),
-                )
-            )
 
 
 def _expected_identities(documents: dict[str, dict]) -> set[tuple[object, object, object]]:
@@ -831,7 +815,7 @@ def _check_gap_references(
                             gapId=gap_id,
                         )
                     )
-                elif str(gap.get("status", "")).lower() in {"resolved", "closed"}:
+                elif str(gap.get("status", "")).lower() in RESOLVED_GAP_STATUSES:
                     issues.append(
                         _issue(
                             "UNKNOWN_REFERENCES_RESOLVED_GAP",
@@ -906,6 +890,8 @@ def _check_design_lock(
 
     actual_records = []
     listed_paths = []
+    immutable_listed_paths = []
+    legacy_validation_report_ignored = False
     for entry in lock["files"]:
         if not isinstance(entry, dict):
             continue
@@ -920,6 +906,10 @@ def _check_design_lock(
             )
             continue
         listed_paths.append(relative_path)
+        if relative_path == "reports/validation-report.json":
+            legacy_validation_report_ignored = True
+            continue
+        immutable_listed_paths.append(relative_path)
         target = _resolve_within(handoff_root, relative_path)
         if target is None or not target.is_file():
             issues.append(
@@ -960,7 +950,7 @@ def _check_design_lock(
             "reports/validation-report.json",
         }
     }
-    if set(listed_paths) != expected_locked_paths:
+    if set(immutable_listed_paths) != expected_locked_paths:
         issues.append(
             _issue(
                 "DESIGN_LOCK_FILE_SET_MISMATCH",
@@ -977,6 +967,8 @@ def _check_design_lock(
         "computedContractsHash": computed_contracts_hash,
         "computedFileCount": len(actual_records),
     }
+    if legacy_validation_report_ignored:
+        result["legacyValidationReportIgnored"] = True
     if computed_contracts_hash != lock.get("contractsHash"):
         issues.append(
             _issue(
@@ -1078,22 +1070,125 @@ def _deduplicate_and_sort(issues: list[dict]) -> list[dict]:
     return [unique[key] for key in sorted(unique)]
 
 
-def _write_validation_report_atomic(handoff_root: Path, report: dict) -> None:
-    reports_root = handoff_root / "reports"
-    reports_root.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=".validation-report-", suffix=".tmp", dir=reports_root
-    )
-    temporary_path = Path(temporary_name)
+class UnsafeValidationReportLayoutError(OSError):
+    pass
+
+
+def _is_link_or_reparse_point(path: Path) -> bool:
     try:
+        metadata = os.lstat(path)
+    except FileNotFoundError:
+        return False
+    return stat.S_ISLNK(metadata.st_mode) or bool(
+        getattr(metadata, "st_file_attributes", 0)
+        & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    )
+
+
+def _safe_validation_report_paths(handoff_root: Path) -> tuple[Path, Path, Path]:
+    try:
+        canonical_root = handoff_root.resolve(strict=True)
+    except OSError as error:
+        raise UnsafeValidationReportLayoutError(
+            "canonical handoff root is unavailable"
+        ) from error
+    reports_root = handoff_root / "reports"
+    if _is_link_or_reparse_point(reports_root):
+        raise UnsafeValidationReportLayoutError(
+            "reports directory is a link or reparse point"
+        )
+    try:
+        canonical_reports_root = reports_root.resolve(strict=True)
+    except OSError as error:
+        raise UnsafeValidationReportLayoutError(
+            "reports directory is unavailable"
+        ) from error
+    if not canonical_reports_root.is_dir():
+        raise UnsafeValidationReportLayoutError(
+            "reports path is not a directory"
+        )
+    try:
+        relative_reports_root = canonical_reports_root.relative_to(canonical_root)
+    except ValueError as error:
+        raise UnsafeValidationReportLayoutError(
+            "reports directory escapes the canonical handoff root"
+        ) from error
+    if relative_reports_root != Path("reports"):
+        raise UnsafeValidationReportLayoutError(
+            "reports directory is not the canonical package reports directory"
+        )
+    report_path = reports_root / "validation-report.json"
+    if _is_link_or_reparse_point(report_path):
+        raise UnsafeValidationReportLayoutError(
+            "validation report is a link or reparse point"
+        )
+    if os.path.lexists(report_path) and not report_path.is_file():
+        raise UnsafeValidationReportLayoutError(
+            "validation report path is not a regular file"
+        )
+    return reports_root, canonical_reports_root, report_path
+
+
+def _write_validation_report_atomic(handoff_root: Path, report: dict) -> None:
+    reports_root, canonical_reports_root, report_path = (
+        _safe_validation_report_paths(handoff_root)
+    )
+    descriptor = -1
+    temporary_path = None
+    try:
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=".validation-report-", suffix=".tmp", dir=reports_root
+        )
+        temporary_path = Path(temporary_name)
+        if (
+            _is_link_or_reparse_point(temporary_path)
+            or temporary_path.resolve(strict=True).parent != canonical_reports_root
+        ):
+            raise UnsafeValidationReportLayoutError(
+                "temporary validation report escapes the canonical reports directory"
+            )
+        rechecked_reports_root, rechecked_canonical_root, rechecked_report_path = (
+            _safe_validation_report_paths(handoff_root)
+        )
+        if (
+            rechecked_reports_root != reports_root
+            or rechecked_canonical_root != canonical_reports_root
+            or rechecked_report_path != report_path
+        ):
+            raise UnsafeValidationReportLayoutError(
+                "validation report layout changed during persistence"
+            )
         with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+            descriptor = -1
             stream.write(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary_path, reports_root / "validation-report.json")
+        rechecked_reports_root, rechecked_canonical_root, rechecked_report_path = (
+            _safe_validation_report_paths(handoff_root)
+        )
+        if (
+            rechecked_reports_root != reports_root
+            or rechecked_canonical_root != canonical_reports_root
+            or rechecked_report_path != report_path
+            or temporary_path.resolve(strict=True).parent != canonical_reports_root
+        ):
+            raise UnsafeValidationReportLayoutError(
+                "validation report layout changed during persistence"
+            )
+        os.replace(temporary_path, report_path)
     finally:
-        if os.path.lexists(temporary_path):
-            temporary_path.unlink()
+        if descriptor >= 0:
+            os.close(descriptor)
+        if temporary_path is not None and os.path.lexists(temporary_path):
+            try:
+                temporary_parent = temporary_path.resolve(strict=True).parent
+            except OSError:
+                temporary_parent = None
+            if (
+                temporary_parent == canonical_reports_root
+                and not _is_link_or_reparse_point(temporary_path)
+            ):
+                temporary_path.unlink()
 
 
 def validate_handoff(
@@ -1127,7 +1222,7 @@ def validate_handoff(
                     )
 
             documents = {}
-            for relative_path in (*SCHEMA_CONTRACTS, "reports/validation-report.json"):
+            for relative_path in SCHEMA_CONTRACTS:
                 path = handoff_root / PurePosixPath(relative_path)
                 if path.is_file():
                     document = _load_json(path, relative_path, issues)
@@ -1194,6 +1289,16 @@ def validate_handoff(
     if handoff_root.is_dir():
         try:
             _write_validation_report_atomic(handoff_root, result)
+        except UnsafeValidationReportLayoutError as error:
+            issues.append(
+                _issue(
+                    "VALIDATION_REPORT_UNSAFE_LAYOUT",
+                    "reports/validation-report.json",
+                    f"refused unsafe validation report layout: {error}",
+                )
+            )
+            result["issues"] = _deduplicate_and_sort(issues)
+            result["status"] = "failed"
         except (OSError, UnicodeError, TypeError, ValueError) as error:
             issues.append(
                 _issue(

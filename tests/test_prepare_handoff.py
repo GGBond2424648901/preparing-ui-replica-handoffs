@@ -861,6 +861,16 @@ class PrepareHandoffTests(unittest.TestCase):
         }
         self.assertSetEqual(set(_file_bytes(first_output)), expected_files)
         self.assertFalse((first_output / "reports" / "contact-sheet.png").exists())
+        validation_placeholder = json.loads(
+            (first_output / "reports" / "validation-report.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(validation_placeholder["status"], "not-run")
+        self.assertEqual(
+            [issue["code"] for issue in validation_placeholder["issues"]],
+            ["VALIDATION_NOT_RUN"],
+        )
         design_lock = json.loads(
             (first_output / "contracts" / "design-lock.json").read_text(
                 encoding="utf-8"

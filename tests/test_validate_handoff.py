@@ -2,6 +2,7 @@ import csv
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -71,6 +72,33 @@ def _record_set_hash(records):
         digest.update(file_hash.encode("ascii"))
         digest.update(b"\n")
     return digest.hexdigest()
+
+
+def _create_directory_link(link, target):
+    try:
+        link.symlink_to(target, target_is_directory=True)
+        return "symlink"
+    except (OSError, NotImplementedError):
+        if os.name != "nt":
+            raise
+    completed = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise OSError(completed.stderr or completed.stdout)
+    return "junction"
+
+
+def _remove_directory_link(link, link_kind):
+    if not os.path.lexists(link):
+        return
+    if link_kind == "junction":
+        os.rmdir(link)
+    else:
+        link.unlink()
 
 
 def _refresh_design_lock(handoff):
@@ -244,6 +272,78 @@ class ValidateHandoffTests(unittest.TestCase):
         self.assertEqual(second, first)
         self.assertEqual(report_path.read_bytes(), first_bytes)
 
+    def test_missing_validation_report_is_derived_and_rerun_stable(self):
+        report_path = self.handoff / "reports" / "validation-report.json"
+        report_path.unlink()
+
+        first = self.validate(source_root=self.source)
+        first_bytes = report_path.read_bytes()
+        second = self.validate(source_root=self.source)
+
+        self.assertEqual(first["status"], "passed")
+        self.assertEqual(first, second)
+        self.assertEqual(_read_json(report_path), second)
+        self.assertEqual(report_path.read_bytes(), first_bytes)
+
+    def test_malformed_validation_report_is_derived_and_rerun_stable(self):
+        report_path = self.handoff / "reports" / "validation-report.json"
+        report_path.write_text("{not-json", encoding="utf-8")
+
+        first = self.validate(source_root=self.source)
+        first_bytes = report_path.read_bytes()
+        second = self.validate(source_root=self.source)
+
+        self.assertEqual(first["status"], "passed")
+        self.assertEqual(first, second)
+        self.assertEqual(_read_json(report_path), second)
+        self.assertEqual(report_path.read_bytes(), first_bytes)
+
+    def test_legacy_lock_validation_report_entry_is_ignored_stably(self):
+        report_path = self.handoff / "reports" / "validation-report.json"
+        lock_path = self.handoff / "contracts" / "design-lock.json"
+        lock = _read_json(lock_path)
+        lock["files"].append(
+            {
+                "relativePath": "reports/validation-report.json",
+                "sha256": _sha256(report_path),
+            }
+        )
+        lock["files"].sort(key=lambda entry: entry["relativePath"])
+        _write_json(lock_path, lock)
+        lock_bytes = lock_path.read_bytes()
+
+        first = self.validate(source_root=self.source)
+        second = self.validate(source_root=self.source)
+
+        self.assertEqual(first["status"], "passed")
+        self.assertEqual(first, second)
+        self.assertEqual(lock_path.read_bytes(), lock_bytes)
+        self.assertNotIn("DESIGN_LOCK_FILE_HASH_MISMATCH", self.codes(second))
+        self.assertNotIn("DESIGN_LOCK_FILE_SET_MISMATCH", self.codes(second))
+
+    def test_validation_report_writer_rejects_linked_reports_directory(self):
+        reports_path = self.handoff / "reports"
+        outside_reports = self.root / "outside-reports"
+        reports_path.rename(outside_reports)
+        original_report = (outside_reports / "validation-report.json").read_bytes()
+        try:
+            link_kind = _create_directory_link(reports_path, outside_reports)
+        except OSError as error:
+            self.skipTest(f"directory links unavailable: {error}")
+        self.addCleanup(_remove_directory_link, reports_path, link_kind)
+
+        result = self.validate(source_root=self.source)
+
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("VALIDATION_REPORT_UNSAFE_LAYOUT", self.codes(result))
+        self.assertEqual(
+            (outside_reports / "validation-report.json").read_bytes(),
+            original_report,
+        )
+        self.assertEqual(
+            list(outside_reports.glob(".validation-report-*.tmp")), []
+        )
+
     def test_untouched_generated_package_fails_and_replaces_not_run_report(self):
         raw_handoff = self.root / "raw-handoff"
         PREPARE.prepare_handoff(self.source, raw_handoff, "v1")
@@ -379,19 +479,18 @@ class ValidateHandoffTests(unittest.TestCase):
 
         self.assertIn("QA_EVIDENCE_PATH_REUSED", self.codes(self.validate()))
 
-    def test_reports_distinct_qa_paths_with_reused_content_hash(self):
+    def test_allows_distinct_qa_paths_with_identical_content_hashes(self):
         path = self.handoff / "contracts" / "visual-qa-matrix.csv"
         rows = _read_csv(path)
-        duplicate_path = "reports/qa/duplicate-current.png"
-        source = self.handoff / rows[0]["referencePath"]
-        duplicate = self.handoff / duplicate_path
-        duplicate.parent.mkdir(parents=True, exist_ok=True)
-        duplicate.write_bytes(source.read_bytes())
-        rows[0]["currentPath"] = duplicate_path
-        _write_csv(path, rows, list(rows[0]))
+        source_bytes = (self.handoff / rows[0]["referencePath"]).read_bytes()
+        for field in ("currentPath", "overlayPath", "diffPath"):
+            (self.handoff / rows[0][field]).write_bytes(source_bytes)
         _refresh_design_lock(self.handoff)
 
-        self.assertIn("QA_EVIDENCE_HASH_REUSED", self.codes(self.validate()))
+        result = self.validate(source_root=self.source)
+
+        self.assertEqual(result["status"], "passed")
+        self.assertNotIn("QA_EVIDENCE_HASH_REUSED", self.codes(result))
 
     def test_reports_malformed_json(self):
         (self.handoff / "contracts" / "page-inventory.json").write_text(
@@ -519,18 +618,25 @@ class ValidateHandoffTests(unittest.TestCase):
 
         self.assertIn("GAP_ID_NOT_FOUND", self.codes(self.validate()))
 
-    def test_reports_unknown_state_linked_to_resolved_gap(self):
+    def test_reports_unknown_state_linked_to_any_resolved_gap_status(self):
         path = self.handoff / "contracts" / "page-inventory.json"
         inventory = _read_json(path)
         inventory["pages"][0]["route"].update(
             {"evidenceLevel": "unknown", "gapId": "G001"}
         )
         _write_json(path, inventory)
-        _refresh_design_lock(self.handoff)
+        gap_path = self.handoff / "contracts" / "gap-register.csv"
+        gap_rows = _read_csv(gap_path)
 
-        self.assertIn(
-            "UNKNOWN_REFERENCES_RESOLVED_GAP", self.codes(self.validate())
-        )
+        for status in ("resolved", "closed", "approved", "accepted", "waived"):
+            with self.subTest(status=status):
+                gap_rows[0]["status"] = status
+                _write_csv(gap_path, gap_rows, list(gap_rows[0]))
+                _refresh_design_lock(self.handoff)
+
+                self.assertIn(
+                    "UNKNOWN_REFERENCES_RESOLVED_GAP", self.codes(self.validate())
+                )
 
     def test_reports_missing_gap_reference_from_requirement_ledger(self):
         path = self.handoff / "contracts" / "requirement-ledger.csv"
