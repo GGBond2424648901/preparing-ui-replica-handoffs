@@ -111,3 +111,7 @@ An approved page's machine contract and both page documents contain substantive,
 ruleId: DP-019
 
 Validate semantic ownership by page-document section ID: identity/source belongs in identity, shell/regions in canvas, layout/copy/icons/data in their section, components/interactions/responsiveness in behavior, and QA/gaps in acceptance. Appending every ID to an arbitrary section does not satisfy coverage.
+
+ruleId: DP-020
+
+Every approved-page section contains `contractHash: sha256:<hex>` computed from that section's machine-contract subset plus substantive prose in the locale; an ID/hash-only list does not pass. Copy, data shapes, component names, and interaction outcomes appear in their semantically matching sections.

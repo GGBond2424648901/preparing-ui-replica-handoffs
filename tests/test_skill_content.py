@@ -150,6 +150,8 @@ class SkillContentTests(unittest.TestCase):
             "[absence:<field>]",
             "hashed runner result",
             "never executes untrusted commands",
+            "contractHash: sha256:<hex>",
+            "exact-set validation",
         ):
             self.assertIn(literal, en)
 

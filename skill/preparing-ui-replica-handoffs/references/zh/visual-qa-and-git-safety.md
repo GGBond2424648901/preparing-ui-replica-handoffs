@@ -95,3 +95,11 @@ reference 必须绑定该页面资产清单中的已验证设计副本。每条�
 ruleId: QG-018
 
 结构 runner 必须绑定 DOM 快照与实施快照，并把 region/component/target file 与机器合同交叉验证；交互 runner 必须逐用例绑定已登记 interaction ID 与非空断言。JSON 中 `NaN`、正负无穷及任何非有限阈值/指标均为无效输入。
+
+ruleId: QG-019
+
+结构映射采用精确全集校验：需求、区域、组件、DOM 节点和实施目标不得缺失、重复或多出。合法 `[absence:components]` 时对应集合必须为空，并由绑定已解决缺口的 absence 断言证明。
+
+ruleId: QG-020
+
+合法 `[absence:interactions]` 页面可没有交互用例，但 runner 必须提供绑定已解决缺口的 absence-check 与“没有交互 ID/用例”的通过断言；没有该证据时空用例仍然失败。

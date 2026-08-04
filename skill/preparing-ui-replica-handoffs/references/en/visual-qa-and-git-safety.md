@@ -95,3 +95,11 @@ Reference binds to the page's verified design copy in the asset manifest. Every 
 ruleId: QG-018
 
 A structural runner binds DOM and implementation snapshots and cross-checks region/component/target-file identities with machine contracts. An interaction runner binds each case to a declared interaction ID and nonempty assertions. JSON `NaN`, infinities, and every non-finite tolerance or metric are invalid input.
+
+ruleId: QG-019
+
+Structural mappings use exact-set validation: requirements, regions, components, DOM nodes, and implementation targets allow no missing, duplicate, or extra entries. With valid `[absence:components]`, the corresponding sets are empty and a resolved-gap-bound absence assertion proves that fact.
+
+ruleId: QG-020
+
+A valid `[absence:interactions]` page may have no interaction cases only when its runner supplies a resolved-gap-bound absence-check and passing assertion that no interaction IDs/cases exist. Empty cases still fail without that evidence.
