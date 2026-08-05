@@ -38,10 +38,16 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["responsiveVariantId", "mode", "evidenceLevel", "status", "gapIds"],
+        "required": ["responsiveVariantId", "mode", "targetPlatform", "layoutPolicy", "evidenceLevel", "status", "gapIds"],
         "properties": {
           "responsiveVariantId": { "type": "string", "minLength": 1 },
           "mode": { "enum": ["baseline-elastic", "baseline-scroll", "responsive"] },
+          "targetPlatform": {
+            "enum": ["desktop-web", "mobile-web", "responsive-web", "desktop-native", "unknown"]
+          },
+          "layoutPolicy": {
+            "enum": ["desktop-hybrid-elastic", "fully-fluid", "fixed-baseline", "evidence-defined", "unknown"]
+          },
           "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
           "status": { "$ref": "#/$defs/lifecycleStatus" },
           "gapIds": { "$ref": "#/$defs/gapIds" }
@@ -57,6 +63,14 @@
                 {
                   "properties": { "evidenceLevel": { "const": "unknown" } },
                   "required": ["evidenceLevel"]
+                },
+                {
+                  "properties": { "targetPlatform": { "const": "unknown" } },
+                  "required": ["targetPlatform"]
+                },
+                {
+                  "properties": { "layoutPolicy": { "const": "unknown" } },
+                  "required": ["layoutPolicy"]
                 }
               ]
             },

@@ -115,3 +115,11 @@ ruleId: DP-019
 ruleId: DP-020
 
 批准页面的每个逐页章节都必须包含由该章节机器合同子集计算的 `contractHash: sha256:<hex>`，并有该语言的实质说明；纯 ID/哈希列表不能通过。文案、数据形状、组件名称和交互结果须出现在语义对应章节。
+
+sectionId: desktop-web-profile
+
+## 桌面端 Web 交付配置
+
+ruleId: DP-021
+
+配置、逐页合同、组件注册表、实施映射和 QA profile 必须共同声明目标平台与布局策略。默认交付值为 `desktop-web` 与 `desktop-hybrid-elastic`；每个区域还要记录桌面角色和窄桌面行为。移动端或原生桌面端必须使用独立平台值和变体，不能静默继承桌面 Web 合同。

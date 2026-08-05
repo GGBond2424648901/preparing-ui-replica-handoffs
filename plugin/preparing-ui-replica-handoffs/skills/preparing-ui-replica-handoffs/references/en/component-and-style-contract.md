@@ -99,3 +99,15 @@ For dashboards, card groups, table regions, chart regions, and multicolumn works
 ruleId: CS-017
 
 Treat browser zoom as a change to the effective CSS viewport, not as permission to visually scale the page root or screenshot. Components may shrink according to their contract until minimum dimensions are reached; after that, select wrapping, reflow, or page/region/hybrid scrolling from evidence. Typography, icons, borders, and spacing continue to use contracted tokens without an extra scale factor.
+
+sectionId: desktop-mixed-layout
+
+## Desktop mixed-layout roles
+
+ruleId: CS-018
+
+Assign every shell, region, and component a desktop role: `fixed-shell`, `flexible-workspace`, `bounded-content`, `scroll-surface`, or `intrinsic`. Sidebar, TopBar, and toolbars are fixed/sticky only when supported by evidence; the primary workspace absorbs surplus space; text/form content may be bounded; and tables, code editors, workflows, canvases, and logs may be dedicated scroll surfaces. Never impose one growth rule on every role.
+
+ruleId: CS-019
+
+A desktop page has one primary vertical scroll chain by default. Region scrolling is reserved for fixed-height or two-dimensional/continuous functional surfaces and records axis, boundary, chaining, wheel handoff, and reachability. On wide screens, bounded columns, maximum line length, and component caps prevent over-stretching. On narrow desktop screens, prefer scrolling after minimum dimensions; broad reflow requires an approved variant.

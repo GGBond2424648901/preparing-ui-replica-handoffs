@@ -27,4 +27,4 @@ sectionId: elastic-sizing
 
 ## Elastic Sizing
 
-Every shell, region, and component records width mode, min/base/max width and height, Grid/Flex tracks or grow/shrink weights, wrapping/reflow triggers, wide-screen surplus-space allocation, and overflow owner. Treat browser zoom as a change to the effective CSS viewport; never scale the whole page root.
+Every shell, region, and component records width mode, desktop role, narrow-desktop behavior, min/base/max width and height, Grid/Flex tracks or grow/shrink weights, wrapping/reflow triggers, wide-screen surplus-space allocation, and overflow owner. `fixed-shell`, `flexible-workspace`, `bounded-content`, `scroll-surface`, and `intrinsic` may coexist on one page; never impose uniform stretching or scrolling on every component. Treat browser zoom as a change to the effective CSS viewport; never scale the whole page root.

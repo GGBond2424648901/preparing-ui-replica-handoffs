@@ -115,3 +115,15 @@ A wide profile verifies that fixed shell dimensions remain contracted, the main 
 ruleId: QG-022
 
 Narrow and zoom profiles verify the effective CSS viewport, component minimum dimensions, wrapping/reflow triggers, and page/region/hybrid scroll ownership. Root `transform: scale()`, extra zoom, or changed token dimensions cannot manufacture adaptation. Horizontal clipping, overlap, fixed-region drift, or unreachable content fails.
+
+sectionId: desktop-web-acceptance
+
+## Desktop Web acceptance
+
+ruleId: QG-023
+
+Accept desktop behavior separately at the original baseline, a wide viewport, a narrow desktop window, and browser zoom. Check fixed shell, workspace occupancy, bounded-content caps, component minimum dimensions, and scroll owners. A mobile single-column result cannot replace narrow-desktop acceptance, and a wide screenshot cannot prove zoom behavior.
+
+ruleId: QG-024
+
+Scroll acceptance verifies one primary vertical scroll chain plus the necessity, axes, boundaries, wheel handoff, and complete reachability of every dedicated scroll surface. Unjustified nested vertical scrolling, trapped wheel input, sticky-boundary drift, fixed regions covering content, or unbounded wide-screen stretching fails.

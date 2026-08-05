@@ -222,10 +222,16 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["responsiveVariantId", "strategy", "targetFiles", "status", "evidenceLevel", "gapIds"],
+        "required": ["responsiveVariantId", "strategy", "targetPlatform", "layoutPolicy", "targetFiles", "status", "evidenceLevel", "gapIds"],
         "properties": {
           "responsiveVariantId": { "type": "string", "minLength": 1 },
           "strategy": { "enum": ["baseline-elastic", "baseline-scroll", "responsive"] },
+          "targetPlatform": {
+            "enum": ["desktop-web", "mobile-web", "responsive-web", "desktop-native", "unknown"]
+          },
+          "layoutPolicy": {
+            "enum": ["desktop-hybrid-elastic", "fully-fluid", "fixed-baseline", "evidence-defined", "unknown"]
+          },
           "targetFiles": { "$ref": "#/$defs/relativePaths" },
           "status": { "$ref": "#/$defs/lifecycleStatus" },
           "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
@@ -242,6 +248,14 @@
                 {
                   "properties": { "evidenceLevel": { "const": "unknown" } },
                   "required": ["evidenceLevel"]
+                },
+                {
+                  "properties": { "targetPlatform": { "const": "unknown" } },
+                  "required": ["targetPlatform"]
+                },
+                {
+                  "properties": { "layoutPolicy": { "const": "unknown" } },
+                  "required": ["layoutPolicy"]
                 }
               ]
             },

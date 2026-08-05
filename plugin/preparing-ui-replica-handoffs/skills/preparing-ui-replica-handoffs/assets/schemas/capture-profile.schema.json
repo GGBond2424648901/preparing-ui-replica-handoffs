@@ -22,6 +22,8 @@
       "required": [
         "captureProfileId",
         "purpose",
+        "targetPlatform",
+        "layoutPolicy",
         "browser",
         "browserVersion",
         "viewport",
@@ -39,6 +41,12 @@
       "properties": {
         "captureProfileId": { "type": "string", "minLength": 1 },
         "purpose": { "enum": ["baseline", "wide", "narrow", "zoom", "custom"] },
+        "targetPlatform": {
+          "enum": ["desktop-web", "mobile-web", "responsive-web", "desktop-native", "unknown"]
+        },
+        "layoutPolicy": {
+          "enum": ["desktop-hybrid-elastic", "fully-fluid", "fixed-baseline", "evidence-defined", "unknown"]
+        },
         "browser": { "type": "string", "minLength": 1 },
         "browserVersion": { "type": "string", "minLength": 1 },
         "viewport": {
@@ -89,6 +97,14 @@
               {
                 "properties": { "zoom": { "const": "unknown" } },
                 "required": ["zoom"]
+              },
+              {
+                "properties": { "targetPlatform": { "const": "unknown" } },
+                "required": ["targetPlatform"]
+              },
+              {
+                "properties": { "layoutPolicy": { "const": "unknown" } },
+                "required": ["layoutPolicy"]
               }
             ]
           },

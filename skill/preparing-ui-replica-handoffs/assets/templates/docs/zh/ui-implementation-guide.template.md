@@ -29,6 +29,12 @@ sectionId: elastic-layout
 
 逐页记录 Shell、区域、网格和组件的 `fixed`、`fluid`、`bounded-fluid`、`intrinsic` 或 `mixed` 尺寸模式，以及最小/基准/最大尺寸、Grid/Flex 轨道、伸展权重、收缩下限和溢出所有者。宽屏应按证据让主工作区利用可用宽度并分配剩余空间，避免无依据的大面积空白；窄屏或浏览器缩放产生的有效窄视口达到最小尺寸后，按合同换行、重排或滚动。禁止根节点 `transform: scale()`，有明确 `max-width` 的设计除外并须登记证据。
 
+sectionId: desktop-web-first
+
+## 桌面端 Web 优先顺序
+
+默认布局策略为 `desktop-web` + `desktop-hybrid-elastic`：固定/粘性 Shell → 流式或有界流式主工作区 → 组件最小/基准/最大尺寸 → 按功能归属的整页/模块/混合滚动 → 获批重排。普通纵向内容优先整页滚动；表格、代码、流程图、画布和日志可使用专用滚动面。窄桌面窗口或浏览器放大不得自动转换为移动端单列；移动端必须使用独立 `variantId`。
+
 sectionId: qa-and-git-safety
 
 ## QA 与 Git 安全

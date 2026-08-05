@@ -8,6 +8,8 @@
     "designSourceDir",
     "outputDir",
     "designVersion",
+    "targetPlatform",
+    "layoutPolicy",
     "locales",
     "gitScope"
   ],
@@ -16,6 +18,12 @@
     "designSourceDir": { "$ref": "#/$defs/relativePath" },
     "outputDir": { "$ref": "#/$defs/relativePath" },
     "designVersion": { "type": "string", "minLength": 1 },
+    "targetPlatform": {
+      "enum": ["desktop-web", "mobile-web", "responsive-web", "desktop-native", "unknown"]
+    },
+    "layoutPolicy": {
+      "enum": ["desktop-hybrid-elastic", "fully-fluid", "fixed-baseline", "evidence-defined", "unknown"]
+    },
     "locales": {
       "type": "array",
       "items": { "enum": ["zh-CN", "en-US"] },

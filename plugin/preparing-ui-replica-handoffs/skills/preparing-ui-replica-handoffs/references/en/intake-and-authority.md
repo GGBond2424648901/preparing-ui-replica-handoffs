@@ -10,7 +10,7 @@ Resolve and record the read-only design-image directory, a separate handoff outp
 
 ruleId: IA-002
 
-Optional inputs include product goals, roles, modules, formal requirements, routes, data/permission notes, brand assets, target stack, approved pages/states/responsive variants, browser/viewport/DPR/locale/timezone/theme/font environment, and Git repository plus allowlist. When absent, create a `gapId`; never silently guess.
+Optional inputs include product goals, roles, modules, formal requirements, routes, data/permission notes, brand assets, target stack, target platform, layout policy, approved pages/states/responsive variants, browser/viewport/DPR/locale/timezone/theme/font environment, and Git repository plus allowlist. When absent, create a `gapId`; never silently guess.
 
 sectionId: source-immutability
 
@@ -67,3 +67,15 @@ sectionId: intake-gate
 ruleId: IA-011
 
 Before generation, report the source to read, output to write, image count, design version, languages, and known gaps. Stop with a stable diagnostic when path relationships are unsafe, sources are empty/corrupt, or output ownership is unclear.
+
+sectionId: target-platform
+
+## Target platform and layout policy
+
+ruleId: IA-012
+
+This skill prepares a `desktop-web` + `desktop-hybrid-elastic` contract by default. An explicit user choice or direct mobile/native-desktop design evidence overrides that default and records its authority. The desktop default establishes implementation priority; it is not misrepresented as direct screenshot evidence.
+
+ruleId: IA-013
+
+A desktop contract distinguishes fixed/sticky shell, fluid or bounded-fluid workspace, min/max-constrained components, page scrolling, and function-owned region scrolling. Mobile single-column layout, hidden navigation, or broad reflow requires a separate `variantId` backed by direct evidence or explicit approval.

@@ -3,6 +3,8 @@
   "designSourceDir": "design-source",
   "outputDir": "ui-replica-handoff",
   "designVersion": "v1",
+  "targetPlatform": "desktop-web",
+  "layoutPolicy": "desktop-hybrid-elastic",
   "locales": [
     "zh-CN",
     "en-US"

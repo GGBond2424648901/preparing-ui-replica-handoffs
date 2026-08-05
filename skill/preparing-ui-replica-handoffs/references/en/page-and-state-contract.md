@@ -91,3 +91,15 @@ sectionId: page-acceptance
 ruleId: PS-015
 
 Each page contract covers identity, source, canvas, shell, regions, layout, components, copy, icons, data, interactions, states, responsiveness, implementation mapping, QA, and gaps. If any is absent, status is incomplete and the package cannot say “no inference required.”
+
+sectionId: desktop-web-first
+
+## Desktop-Web-first contract
+
+ruleId: PS-016
+
+Apply and record this order for every desktop region: fixed/sticky shell and tool areas; fluid or bounded-fluid primary workspace; min/base/max dimensions for cards, tables, editors, canvases, and other components; page, region, or hybrid scroll ownership; and only then evidence-backed or approved wrapping/reflow. `baseline-elastic` means space is used through this order, not that every region stretches unconditionally.
+
+ruleId: PS-017
+
+A narrow desktop window or browser zoom does not automatically trigger a mobile single-column layout. Components first shrink to contracted minima. Ordinary vertical content prefers page scrolling, while tables, code, workflows, canvases, logs, and other two-dimensional or continuous surfaces may own region scrolling. Mobile navigation replacement, hidden elements, or single-column reflow requires a mobile design, formal material, or explicit approval.

@@ -593,6 +593,8 @@ def _build_page_inventory(assets: list[dict]) -> dict:
                     {
                         "responsiveVariantId": "baseline-elastic",
                         "mode": "baseline-elastic",
+                        "targetPlatform": "desktop-web",
+                        "layoutPolicy": "desktop-hybrid-elastic",
                         "minWidth": None,
                         "maxWidth": None,
                         "evidenceLevel": "unknown",
@@ -625,6 +627,8 @@ def _build_ui_style_contract(global_gap_id: str) -> dict:
             {
                 "responsiveVariantId": "baseline-elastic",
                 "mode": "baseline-elastic",
+                "targetPlatform": "desktop-web",
+                "layoutPolicy": "desktop-hybrid-elastic",
                 "evidenceLevel": "unknown",
                 "status": "proposed",
                 "gapIds": [global_gap_id],
@@ -660,6 +664,8 @@ def _build_implementation_map(assets: list[dict]) -> dict:
                     {
                         "responsiveVariantId": "baseline-elastic",
                         "strategy": "baseline-elastic",
+                        "targetPlatform": "desktop-web",
+                        "layoutPolicy": "desktop-hybrid-elastic",
                         "targetFiles": [],
                         "status": "proposed",
                         "evidenceLevel": "unknown",
@@ -693,6 +699,8 @@ def _build_capture_profiles(assets: list[dict]) -> dict:
             {
                 "captureProfileId": _capture_profile_id(number),
                 "purpose": "baseline",
+                "targetPlatform": "desktop-web",
+                "layoutPolicy": "desktop-hybrid-elastic",
                 "browser": "unclassified",
                 "browserVersion": "unclassified",
                 "viewport": {"width": asset["width"], "height": asset["height"]},
@@ -820,8 +828,9 @@ def _page_doc_values(number: int, asset: dict, locale: str) -> dict[str, str]:
         )
         content_text = "未从像素自动推断布局、文案、图标或数据。相关清单保持为空。"
         behavior_text = (
-            "未自动创建组件或交互。已登记 `baseline-elastic` 测量基线，但它不预设固定页面宽度或滚动所有者；"
-            "宽屏铺满或有界、Grid/Flex 伸缩、窄屏/浏览器缩放后的换行重排，以及整页/模块/混合滚动策略均需证据；"
+            "未自动创建组件或交互。已登记桌面端 Web 优先的 `baseline-elastic` 候选：固定/粘性 Shell、"
+            "流式或有界流式工作区、组件最小尺寸、按功能归属的滚动、最后才是获批重排；它不预设固定页面宽度或统一滚动所有者。"
+            "宽屏铺满或有界、Grid/Flex 伸缩、窄桌面/浏览器缩放后的滚动或重排均需证据；"
             f"禁止用页面根节点整体缩放代替布局（`{gap_id}`）。"
         )
         qa_text = (
@@ -845,9 +854,10 @@ def _page_doc_values(number: int, asset: dict, locale: str) -> dict[str, str]:
             "Those inventories remain empty."
         )
         behavior_text = (
-            "No components or interactions were invented. A `baseline-elastic` measurement baseline is registered "
-            "without assuming fixed page width or scroll ownership. Wide fill versus bounding, "
-            "Grid/Flex growth, narrow/browser-zoom wrapping or reflow, and page/region/hybrid scrolling all need evidence. "
+            "No components or interactions were invented. A desktop-Web-first `baseline-elastic` candidate is registered: "
+            "fixed/sticky shell, fluid or bounded-fluid workspace, component minimum dimensions, function-owned scrolling, "
+            "then approved reflow. It assumes neither fixed page width nor one scroll owner. Wide fill versus bounding, "
+            "Grid/Flex growth, narrow-desktop/browser-zoom scrolling or reflow all need evidence. "
             f"Whole-page root scaling cannot substitute for layout (`{gap_id}`)."
         )
         qa_text = (
@@ -1081,9 +1091,10 @@ def _build_generated_files(
             "# UI Replica Handoff / UI 复刻交付\n\n"
             "This deterministic preparation skeleton preserves source evidence and records "
             "unknowns without inventing UI semantics. It is not an implementation-complete "
-            "or validation-passing claim.\n\n"
+            "or validation-passing claim. Its default preparation profile is desktop Web with "
+            "mixed fixed, bounded-fluid, fluid, and function-owned scroll regions.\n\n"
             "此确定性准备骨架保留来源证据，并在不虚构 UI 语义的前提下登记未知项。"
-            "它不代表实现完成或验证通过。\n"
+            "它不代表实现完成或验证通过；默认准备桌面端 Web 的固定、流式、有界流式和功能型滚动混合合同。\n"
         ).encode("utf-8"),
         "contracts/asset-manifest.json": _json_bytes(
             {
@@ -1098,7 +1109,12 @@ def _build_generated_files(
             _build_ui_style_contract(global_gap_id)
         ),
         "contracts/component-registry.json": _json_bytes(
-            {"schemaVersion": SCHEMA_VERSION, "components": []}
+            {
+                "schemaVersion": SCHEMA_VERSION,
+                "targetPlatform": "desktop-web",
+                "layoutPolicy": "desktop-hybrid-elastic",
+                "components": [],
+            }
         ),
         "contracts/implementation-map.json": _json_bytes(
             _build_implementation_map(assets)

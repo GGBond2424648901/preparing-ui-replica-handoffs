@@ -115,3 +115,11 @@ Validate semantic ownership by page-document section ID: identity/source belongs
 ruleId: DP-020
 
 Every approved-page section contains `contractHash: sha256:<hex>` computed from that section's machine-contract subset plus substantive prose in the locale; an ID/hash-only list does not pass. Copy, data shapes, component names, and interaction outcomes appear in their semantically matching sections.
+
+sectionId: desktop-web-profile
+
+## Desktop Web delivery profile
+
+ruleId: DP-021
+
+Configuration, page contracts, component registry, implementation map, and QA profiles declare target platform and layout policy consistently. Default delivery values are `desktop-web` and `desktop-hybrid-elastic`; every region also records a desktop role and narrow-desktop behavior. Mobile Web or native desktop uses a separate platform value and variant instead of silently inheriting the desktop-Web contract.

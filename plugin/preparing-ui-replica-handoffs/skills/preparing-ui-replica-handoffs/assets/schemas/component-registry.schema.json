@@ -3,9 +3,15 @@
   "title": "UI component registry",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "components"],
+  "required": ["schemaVersion", "targetPlatform", "layoutPolicy", "components"],
   "properties": {
     "schemaVersion": { "const": "1.0.0" },
+    "targetPlatform": {
+      "enum": ["desktop-web", "mobile-web", "responsive-web", "desktop-native", "unknown"]
+    },
+    "layoutPolicy": {
+      "enum": ["desktop-hybrid-elastic", "fully-fluid", "fixed-baseline", "evidence-defined", "unknown"]
+    },
     "components": {
       "type": "array",
       "items": { "$ref": "#/$defs/component" }
@@ -92,6 +98,8 @@
             "shrinkWeight",
             "wrapPolicy",
             "overflowOwner",
+            "desktopRole",
+            "narrowDesktopBehavior",
             "wideViewportBehavior",
             "zoomBehavior",
             "evidenceLevel",
@@ -115,6 +123,12 @@
             },
             "overflowOwner": {
               "enum": ["page", "region", "hybrid", "none", "unknown"]
+            },
+            "desktopRole": {
+              "enum": ["fixed-shell", "flexible-workspace", "bounded-content", "scroll-surface", "intrinsic", "unknown"]
+            },
+            "narrowDesktopBehavior": {
+              "enum": ["shrink-to-min", "page-scroll", "region-scroll", "hybrid-scroll", "approved-reflow", "unknown"]
             },
             "wideViewportBehavior": {
               "enum": ["fill-available", "bounded", "preserve-fixed", "intrinsic", "unknown"]
@@ -144,6 +158,14 @@
                   {
                     "properties": { "overflowOwner": { "const": "unknown" } },
                     "required": ["overflowOwner"]
+                  },
+                  {
+                    "properties": { "desktopRole": { "const": "unknown" } },
+                    "required": ["desktopRole"]
+                  },
+                  {
+                    "properties": { "narrowDesktopBehavior": { "const": "unknown" } },
+                    "required": ["narrowDesktopBehavior"]
                   },
                   {
                     "properties": { "wideViewportBehavior": { "const": "unknown" } },

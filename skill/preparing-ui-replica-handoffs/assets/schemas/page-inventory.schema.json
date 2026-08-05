@@ -195,6 +195,8 @@
               "trackFormula",
               "growWeight",
               "shrinkPolicy",
+              "desktopRole",
+              "narrowDesktopBehavior",
               "wideViewportBehavior",
               "zoomBehavior",
               "evidenceLevel",
@@ -234,6 +236,12 @@
               "shrinkPolicy": {
                 "enum": ["preserve-min", "wrap", "reflow", "scroll", "none", "unknown"]
               },
+              "desktopRole": {
+                "enum": ["fixed-shell", "flexible-workspace", "bounded-content", "scroll-surface", "intrinsic", "unknown"]
+              },
+              "narrowDesktopBehavior": {
+                "enum": ["shrink-to-min", "page-scroll", "region-scroll", "hybrid-scroll", "approved-reflow", "unknown"]
+              },
               "wideViewportBehavior": {
                 "enum": ["fill-available", "bounded", "preserve-fixed", "intrinsic", "unknown"]
               },
@@ -271,6 +279,14 @@
                     {
                       "properties": { "shrinkPolicy": { "const": "unknown" } },
                       "required": ["shrinkPolicy"]
+                    },
+                    {
+                      "properties": { "desktopRole": { "const": "unknown" } },
+                      "required": ["desktopRole"]
+                    },
+                    {
+                      "properties": { "narrowDesktopBehavior": { "const": "unknown" } },
+                      "required": ["narrowDesktopBehavior"]
                     },
                     {
                       "properties": { "wideViewportBehavior": { "const": "unknown" } },
@@ -478,6 +494,8 @@
             "required": [
               "responsiveVariantId",
               "mode",
+              "targetPlatform",
+              "layoutPolicy",
               "minWidth",
               "evidenceLevel",
               "status",
@@ -486,6 +504,12 @@
             "properties": {
               "responsiveVariantId": { "type": "string", "minLength": 1 },
               "mode": { "enum": ["baseline-elastic", "baseline-scroll", "responsive"] },
+              "targetPlatform": {
+                "enum": ["desktop-web", "mobile-web", "responsive-web", "desktop-native", "unknown"]
+              },
+              "layoutPolicy": {
+                "enum": ["desktop-hybrid-elastic", "fully-fluid", "fixed-baseline", "evidence-defined", "unknown"]
+              },
               "minWidth": { "type": ["number", "null"], "minimum": 0 },
               "maxWidth": { "type": ["number", "null"], "minimum": 0 },
               "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
@@ -503,6 +527,14 @@
                     {
                       "properties": { "evidenceLevel": { "const": "unknown" } },
                       "required": ["evidenceLevel"]
+                    },
+                    {
+                      "properties": { "targetPlatform": { "const": "unknown" } },
+                      "required": ["targetPlatform"]
+                    },
+                    {
+                      "properties": { "layoutPolicy": { "const": "unknown" } },
+                      "required": ["layoutPolicy"]
                     }
                   ]
                 },

@@ -1069,6 +1069,8 @@ def _check_capture_profiles(documents: dict[str, dict], issues: list[dict]) -> N
         fonts = profile.get("fontEnvironment")
         incomplete = incomplete or profile.get("theme") == "unknown"
         incomplete = incomplete or profile.get("zoom") in (None, "unknown")
+        incomplete = incomplete or profile.get("targetPlatform") in (None, "unknown")
+        incomplete = incomplete or profile.get("layoutPolicy") in (None, "unknown")
         incomplete = incomplete or not isinstance(fonts, list) or not fonts
         incomplete = incomplete or any(
             str(font).strip().lower() in PLACEHOLDER_VALUES for font in (fonts or [])
