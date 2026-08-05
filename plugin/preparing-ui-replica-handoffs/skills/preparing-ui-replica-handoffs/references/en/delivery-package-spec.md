@@ -26,7 +26,7 @@ sectionId: implementation-guide
 
 ruleId: DP-004
 
-The UI implementation guide defines global workflow, authority order, native-pixel baseline, scroll strategy, implementation sequence, and for each `P###-S##-V##` its regions, geometry, components, copy, icons, data, interactions, states, responsiveness, mappings, and acceptance contract.
+The UI implementation guide defines global workflow, authority order, native-pixel baseline, the distinction between captured canvas and content extent, page/region/hybrid scroll strategy, implementation sequence, and for each `P###-S##-V##` its regions, geometry, components, copy, icons, data, interactions, states, responsiveness, mappings, and acceptance contract.
 
 ruleId: DP-005
 

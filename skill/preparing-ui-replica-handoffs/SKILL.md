@@ -15,7 +15,7 @@ This skill is independent. Do not call, require, or route work through `design-i
 - Write only beneath the approved output root. Store relative paths; reject absolute paths, URI targets, and traversal. 只写入已批准输出根目录，所有路径使用相对路径并拒绝绝对路径、URI 和越界路径。
 - Produce Chinese and English human-readable documents plus one English-keyed machine-contract set. 生成人读中英文双版本，以及一套英文稳定键名的机器合同。
 - Separate evidence from inference. Unknowns stay `unknown`, `candidate`, or `proposed` and reference a `gapId`. 证据与推断分离；未知项保持相应状态并关联 `gapId`。
-- Preserve the original canvas as the baseline. If it does not fit, retain geometry and use horizontal scrolling; do not compress or rearrange it without evidenced or approved responsive variants. 以原始画布为基线；显示不下时保持几何并水平滚动，没有证据或批准不得压缩重排。
+- Treat the original canvas as a native-pixel measurement baseline, not a maximum page or workspace size. Preserve component geometry and extend the page or workspace when content needs more room. Choose page-level scrolling, region-level scrolling, or both from design/function evidence; never compress, scale down, rearrange, or crop merely to fit the captured viewport. 将原始画布视为原生像素测量基线，而不是页面或工作区的最大尺寸；内容需要更多空间时可扩展页面或工作区，并根据设计与功能证据选择整页滚动、模块内滚动或混合滚动，禁止仅为塞入截图视口而压缩、缩小、重排或裁切。
 - Scripts do not initialize, stage, commit, push, or create a worktree. They may only inspect Git and report an allowlist result. 脚本只读检查 Git，不初始化、暂存、提交、推送或创建 worktree。
 - Validation must fail closed. Never claim implementation-ready or complete while blocker/major gaps, missing evidence classes, drift, unsafe paths, or validation errors remain. 验证必须失败关闭；存在 blocker/major、证据缺失、漂移、不安全路径或错误时不得宣称可实施或完成。
 - Readiness validation requires the original source directory. Omitting `--source-root` is an error, never a waiver. 可实施验证必须提供原始源目录；省略 `--source-root` 是错误，不能视为豁免。
@@ -76,7 +76,7 @@ The locale trees contain three top-level guides and one page contract per target
 - If text is clear, transcribe it. If unreadable, use business-appropriate, similar-length inferred copy only when needed for layout, mark it `inferred`, and link the crop/coordinates and `gapId`. 清晰文案照录；仅在布局占位需要时使用长度相近的推断文案，标 `inferred` 并关联裁图/坐标和 `gapId`。
 - If the design shows example records or metrics, classify them as `sample`; do not invent APIs, formulas, permissions, or production truth. 示例记录/指标标为 `sample`，不得据此虚构 API、公式、权限或生产事实。
 - If a route, state, breakpoint, interaction result, icon identity, asset, or component reuse decision is not evidenced or approved, keep it unresolved. 路由、状态、断点、交互结果、图标、资产和复用没有证据或批准时保持未解决。
-- For an unevidenced narrow viewport, preserve the original canvas geometry and require horizontal scrolling; do not merely say responsiveness is unknown. 未证实的窄屏必须保持原始几何并水平滚动，不能只写“响应式未知”。
+- When viewport extent or scroll ownership is not evidenced, preserve the original geometry and record page, region, or hybrid overflow as unresolved with a `gapId`; do not impose a common breakpoint or a single scroll owner. Prefer expansion and scrolling over compression. 视口范围或滚动所有者没有证据时，保持原始几何，并将整页、模块或混合溢出策略以 `gapId` 标为未解决；不得擅自套用常见断点或强制单一滚动所有者，优先扩展和滚动而不是压缩。
 - If references conflict, apply the documented authority order and log the conflict and winning evidence. 证据冲突时执行权威顺序并记录冲突与胜出证据。
 - If any required evidence changes after preparation, rebuild the lock from source; never hand-edit hashes. 必需证据变化后从源重建锁，禁止手改哈希。
 

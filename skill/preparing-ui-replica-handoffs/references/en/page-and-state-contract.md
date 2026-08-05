@@ -18,11 +18,11 @@ sectionId: canvas-shell
 
 ruleId: PS-003
 
-Record original canvas width/height, pixel density when known, background, content origin, Sidebar/TopBar/footer dimensions, fixed/sticky/scroll layers, and clipping boundary. Use `unknown` plus `gapId` for unavailable dimensions.
+Record original canvas width/height, pixel density when known, background, content origin, Sidebar/TopBar/footer dimensions, fixed/sticky layers, clipping boundaries, and page-level and region-level scroll owners, axes, and triggers. Treat the original canvas as captured viewport evidence, not automatically as the final content extent or maximum page size. Use `unknown` plus `gapId` for unavailable facts.
 
 ruleId: PS-004
 
-The original canvas is the 1:1 baseline. When the viewport is too narrow, retain card widths, column ratios, typography, and module positions through an extended workspace or horizontal scrolling; do not compress, rearrange, move, or crop to make it fit.
+The original canvas is the 1:1 measurement baseline, not a page or workspace size ceiling. When content exceeds it, retain card widths, column ratios, typography, spacing, and module positions while extending the document, workspace, or module content extent. Use page scrolling, region scrolling, or both according to design and functional evidence. Do not compress, scale down, rearrange, move, or crop merely to fit the captured viewport or browser.
 
 sectionId: regions
 
@@ -30,11 +30,11 @@ sectionId: regions
 
 ruleId: PS-005
 
-For every visible region, record a unique region ID, reference `x/y/width/height` bounds, parent, neighbor relationships, alignment, column ratio, gap, padding, min/max size, layer, and overflow behavior. Coordinates are a measurement baseline, not an instruction to absolutely position the entire page.
+For every visible region, record a unique region ID, reference `x/y/width/height` bounds, parent, neighbor relationships, alignment, column ratio, gap, padding, min/max size, layer, and overflow behavior. State whether overflow belongs to the browser page, a specific region, or both, including scroll axis, fixed-size evidence, and scroll chaining. Coordinates are a measurement baseline, not an instruction to absolutely position the entire page.
 
 ruleId: PS-006
 
-Also describe the implementation layout model (normal flow, Grid, Flex, overlay), anchors, and scroll owner. When pixel measurement is uncertain, record tolerance and method instead of fabricating integer precision.
+Also describe the implementation layout model (normal flow, Grid, Flex, overlay), anchors, and scroll owner. Constrain scrolling to a module only when design or functional evidence proves a fixed viewport; otherwise retain page, region, and hybrid candidates as `unknown` with a `gapId`. When pixel measurement is uncertain, record tolerance and method instead of fabricating integer precision.
 
 sectionId: visible-content
 
@@ -82,7 +82,7 @@ Create a responsive `variantId` only from design evidence, formal product materi
 
 ruleId: PS-014
 
-An unapproved narrow viewport inherits original geometry and uses horizontal scrolling. If an adaptation must be proposed, label it `candidate`/`proposed`, accept it separately, and never overwrite the native-pixel baseline.
+An unapproved viewport change inherits original geometry without treating the source canvas as a maximum width or height and without assuming that scrolling must belong only to the page or only to a module. Select page-level, region-level, or hybrid overflow from design and functional evidence; otherwise mark the choice `candidate`/`proposed` with a `gapId`. Accept adaptations separately and never overwrite the native-pixel baseline.
 
 sectionId: page-acceptance
 
