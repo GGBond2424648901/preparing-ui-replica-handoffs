@@ -32,7 +32,7 @@
       "minItems": 1,
       "contains": {
         "type": "object",
-        "properties": { "mode": { "const": "baseline-scroll" } },
+        "properties": { "mode": { "enum": ["baseline-elastic", "baseline-scroll"] } },
         "required": ["mode"]
       },
       "items": {
@@ -41,7 +41,7 @@
         "required": ["responsiveVariantId", "mode", "evidenceLevel", "status", "gapIds"],
         "properties": {
           "responsiveVariantId": { "type": "string", "minLength": 1 },
-          "mode": { "enum": ["baseline-scroll", "responsive"] },
+          "mode": { "enum": ["baseline-elastic", "baseline-scroll", "responsive"] },
           "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
           "status": { "$ref": "#/$defs/lifecycleStatus" },
           "gapIds": { "$ref": "#/$defs/gapIds" }

@@ -21,6 +21,7 @@
       "additionalProperties": false,
       "required": [
         "captureProfileId",
+        "purpose",
         "browser",
         "browserVersion",
         "viewport",
@@ -28,6 +29,7 @@
         "locale",
         "timezone",
         "theme",
+        "zoom",
         "fontEnvironment",
         "colorScheme",
         "reducedMotion",
@@ -36,6 +38,7 @@
       ],
       "properties": {
         "captureProfileId": { "type": "string", "minLength": 1 },
+        "purpose": { "enum": ["baseline", "wide", "narrow", "zoom", "custom"] },
         "browser": { "type": "string", "minLength": 1 },
         "browserVersion": { "type": "string", "minLength": 1 },
         "viewport": {
@@ -51,6 +54,12 @@
         "locale": { "type": "string", "minLength": 1 },
         "timezone": { "type": "string", "minLength": 1 },
         "theme": { "enum": ["light", "dark", "system", "unknown"] },
+        "zoom": {
+          "oneOf": [
+            { "type": "number", "exclusiveMinimum": 0 },
+            { "const": "unknown" }
+          ]
+        },
         "fontEnvironment": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
@@ -76,6 +85,10 @@
               {
                 "properties": { "theme": { "const": "unknown" } },
                 "required": ["theme"]
+              },
+              {
+                "properties": { "zoom": { "const": "unknown" } },
+                "required": ["zoom"]
               }
             ]
           },

@@ -1,6 +1,6 @@
 {
   "name": "preparing-ui-replica-handoffs",
-  "version": "1.0.0+codex.20260805022955",
+  "version": "1.0.0+codex.20260805025516",
   "description": "\u4e2d\u6587/English UI \u590d\u523b\u4ea4\u4ed8\u5305\u51c6\u5907\u4e0e\u9a8c\u8bc1\u6280\u80fd\u63d2\u4ef6",
   "author": {
     "name": "Personal"
@@ -14,6 +14,7 @@
     "category": "Developer Tools",
     "capabilities": [
       "Bilingual UI handoff",
+      "Elastic layout contracts",
       "Evidence validation"
     ],
     "defaultPrompt": [

@@ -591,12 +591,13 @@ def _build_page_inventory(assets: list[dict]) -> dict:
                 "interactions": [],
                 "responsiveVariants": [
                     {
-                        "responsiveVariantId": "baseline-scroll",
-                        "mode": "baseline-scroll",
-                        "minWidth": asset["width"],
-                        "evidenceLevel": "direct",
-                        "status": "approved",
-                        "gapIds": [],
+                        "responsiveVariantId": "baseline-elastic",
+                        "mode": "baseline-elastic",
+                        "minWidth": None,
+                        "maxWidth": None,
+                        "evidenceLevel": "unknown",
+                        "status": "proposed",
+                        "gapIds": [gap_id],
                     }
                 ],
                 "acceptanceCriteria": _qa_entries(number),
@@ -622,8 +623,8 @@ def _build_ui_style_contract(global_gap_id: str) -> dict:
         },
         "responsiveVariants": [
             {
-                "responsiveVariantId": "baseline-scroll",
-                "mode": "baseline-scroll",
+                "responsiveVariantId": "baseline-elastic",
+                "mode": "baseline-elastic",
                 "evidenceLevel": "unknown",
                 "status": "proposed",
                 "gapIds": [global_gap_id],
@@ -657,8 +658,8 @@ def _build_implementation_map(assets: list[dict]) -> dict:
                 "interactionMappings": [],
                 "responsiveMappings": [
                     {
-                        "responsiveVariantId": "baseline-scroll",
-                        "strategy": "baseline-scroll",
+                        "responsiveVariantId": "baseline-elastic",
+                        "strategy": "baseline-elastic",
                         "targetFiles": [],
                         "status": "proposed",
                         "evidenceLevel": "unknown",
@@ -691,6 +692,7 @@ def _build_capture_profiles(assets: list[dict]) -> dict:
         profiles.append(
             {
                 "captureProfileId": _capture_profile_id(number),
+                "purpose": "baseline",
                 "browser": "unclassified",
                 "browserVersion": "unclassified",
                 "viewport": {"width": asset["width"], "height": asset["height"]},
@@ -698,6 +700,7 @@ def _build_capture_profiles(assets: list[dict]) -> dict:
                 "locale": "unclassified",
                 "timezone": "unclassified",
                 "theme": "unknown",
+                "zoom": "unknown",
                 "fontEnvironment": ["unclassified"],
                 "colorScheme": "no-preference",
                 "reducedMotion": True,
@@ -813,12 +816,13 @@ def _page_doc_values(number: int, asset: dict, locale: str) -> dict[str, str]:
             f"- 画布：{asset['width']} × {asset['height']} px（直接证据）\n"
             f"- Shell：`unclassified`（unknown，`{gap_id}`）\n"
             f"- 区域 ID：`region-canvas`；整幅画布占位区域，语义角色未知（`{gap_id}`）\n"
-            f"- 画布仅是测量基线，不是最大内容范围；整页、模块或混合滚动所有者待证据确认（`{gap_id}`）"
+            f"- 画布仅是测量基线，不是固定容器或最大内容范围；尺寸模式、最小/基准/最大尺寸、宽屏剩余空间分配及整页/模块/混合滚动所有者待证据确认（`{gap_id}`）"
         )
         content_text = "未从像素自动推断布局、文案、图标或数据。相关清单保持为空。"
         behavior_text = (
-            "未自动创建组件或交互。已登记原始宽度的 `baseline-scroll` 测量基线，但它不是页面尺寸上限；"
-            f"页面扩展、模块扩展以及整页/模块/混合滚动策略均需证据（`{gap_id}`）。"
+            "未自动创建组件或交互。已登记 `baseline-elastic` 测量基线，但它不预设固定页面宽度或滚动所有者；"
+            "宽屏铺满或有界、Grid/Flex 伸缩、窄屏/浏览器缩放后的换行重排，以及整页/模块/混合滚动策略均需证据；"
+            f"禁止用页面根节点整体缩放代替布局（`{gap_id}`）。"
         )
         qa_text = (
             f"视觉、结构与交互 QA 均为 `not-run`。完成前必须解决或批准缺口 `{gap_id}`。"
@@ -834,16 +838,17 @@ def _page_doc_values(number: int, asset: dict, locale: str) -> dict[str, str]:
             f"- Canvas: {asset['width']} × {asset['height']} px (direct evidence)\n"
             f"- Shell: `unclassified` (unknown, `{gap_id}`)\n"
             f"- Region ID: `region-canvas`; whole-canvas placeholder with unknown semantic role (`{gap_id}`)\n"
-            f"- The canvas is a measurement baseline, not a maximum content extent; page, region, or hybrid scroll ownership needs evidence (`{gap_id}`)"
+            f"- The canvas is a measurement baseline, not a fixed container or maximum content extent; sizing mode, min/base/max dimensions, wide-screen surplus allocation, and page/region/hybrid scroll ownership need evidence (`{gap_id}`)"
         )
         content_text = (
             "No layout, copy, icon, or data semantics were inferred from pixels. "
             "Those inventories remain empty."
         )
         behavior_text = (
-            "No components or interactions were invented. An original-width `baseline-scroll` "
-            "measurement baseline is registered, but it is not a page-size ceiling; page or module "
-            f"expansion and page/region/hybrid scroll behavior need evidence (`{gap_id}`)."
+            "No components or interactions were invented. A `baseline-elastic` measurement baseline is registered "
+            "without assuming fixed page width or scroll ownership. Wide fill versus bounding, "
+            "Grid/Flex growth, narrow/browser-zoom wrapping or reflow, and page/region/hybrid scrolling all need evidence. "
+            f"Whole-page root scaling cannot substitute for layout (`{gap_id}`)."
         )
         qa_text = (
             f"Visual, structural, and interaction QA are `not-run`. Gap `{gap_id}` "

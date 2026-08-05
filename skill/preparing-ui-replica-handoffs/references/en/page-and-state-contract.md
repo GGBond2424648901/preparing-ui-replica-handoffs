@@ -22,7 +22,7 @@ Record original canvas width/height, pixel density when known, background, conte
 
 ruleId: PS-004
 
-The original canvas is the 1:1 measurement baseline, not a page or workspace size ceiling. When content exceeds it, retain card widths, column ratios, typography, spacing, and module positions while extending the document, workspace, or module content extent. Use page scrolling, region scrolling, or both according to design and functional evidence. Do not compress, scale down, rearrange, move, or crop merely to fit the captured viewport or browser.
+The original canvas is the 1:1 measurement baseline, not a fixed container or page/workspace size ceiling. On a wider effective viewport, the main workspace consumes available width according to evidence and distributes surplus space through column ratios, grow weights, or bounded-fluid rules instead of preserving screenshot pixel width and leaving accidental dead space; an evidenced `max-width` is the exception. When space is insufficient, preserve minimum card widths, column ratios, typography, and key positional relationships, then select wrapping, reflow, expanded page/module extent, and page, region, or hybrid scrolling from evidence. Never use whole-page `transform: scale()` or arbitrarily compress, move, or crop to fit the window.
 
 sectionId: regions
 
@@ -30,11 +30,11 @@ sectionId: regions
 
 ruleId: PS-005
 
-For every visible region, record a unique region ID, reference `x/y/width/height` bounds, parent, neighbor relationships, alignment, column ratio, gap, padding, min/max size, layer, and overflow behavior. State whether overflow belongs to the browser page, a specific region, or both, including scroll axis, fixed-size evidence, and scroll chaining. Coordinates are a measurement baseline, not an instruction to absolutely position the entire page.
+For every visible region, record a unique region ID, reference `x/y/width/height` bounds, parent, neighbor relationships, alignment, column ratio, gap, padding, layer, and overflow behavior. Also record `fixed`, `fluid`, `bounded-fluid`, `intrinsic`, or `mixed` sizing, min/base/max dimensions, Grid/Flex track formulas, grow weights, shrink floors, and wide/narrow viewport behavior. State whether overflow belongs to the browser page, a specific region, or both, including scroll axis, fixed-size evidence, and scroll chaining. Coordinates are a measurement baseline, not an instruction to absolutely position the entire page.
 
 ruleId: PS-006
 
-Also describe the implementation layout model (normal flow, Grid, Flex, overlay), anchors, and scroll owner. Constrain scrolling to a module only when design or functional evidence proves a fixed viewport; otherwise retain page, region, and hybrid candidates as `unknown` with a `gapId`. When pixel measurement is uncertain, record tolerance and method instead of fabricating integer precision.
+Also describe the implementation layout model (normal flow, Grid, Flex, overlay), the boundary between fixed shell and elastic workspace, anchors, grow/shrink rules, and scroll owner. Constrain scrolling to a module only when design or functional evidence proves a fixed viewport; otherwise retain page, region, and hybrid candidates as `unknown` with a `gapId`. Never substitute whole-screenshot scaling for real layout. When pixel measurement is uncertain, record tolerance and method instead of fabricating integer precision.
 
 sectionId: visible-content
 
@@ -78,11 +78,11 @@ sectionId: responsive
 
 ruleId: PS-013
 
-Create a responsive `variantId` only from design evidence, formal product material, or user approval. Record breakpoint evidence, container change, order change, hidden/replaced elements, and scroll behavior; never assume common breakpoints.
+Create a responsive `variantId` only from design evidence, formal product material, or user approval. Record breakpoint evidence, container sizing mode, min/base/max dimensions, Grid/Flex track and growth changes, order changes, hidden/replaced elements, wrapping/reflow, and scroll behavior. Never assume common breakpoints or create a new layout from one browser-zoom observation alone.
 
 ruleId: PS-014
 
-An unapproved viewport change inherits original geometry without treating the source canvas as a maximum width or height and without assuming that scrolling must belong only to the page or only to a module. Select page-level, region-level, or hybrid overflow from design and functional evidence; otherwise mark the choice `candidate`/`proposed` with a `gapId`. Accept adaptations separately and never overwrite the native-pixel baseline.
+An unapproved viewport change inherits original visual relationships and minimum geometry without treating the source canvas as fixed width or height. The default wide-screen candidate preserves column count and order while an elastic workspace absorbs surplus width according to evidence. On a narrow effective viewport, including one produced by browser zoom, after minimum dimensions are reached select wrapping, reflow, page, region, or hybrid overflow from evidence. Otherwise mark the choice `candidate`/`proposed` with a `gapId`. Accept original, wide, narrow, and zoom capture profiles separately and never overwrite the native-pixel baseline.
 
 sectionId: page-acceptance
 

@@ -6,7 +6,7 @@ sectionId: capture-profile
 
 ruleId: QG-001
 
-Every QA target references a capture profile containing browser/version, operating system, viewport, DPR, locale, timezone, theme, zoom, fonts, and load-wait condition. Unknown environment fields remain `unknown` with a `gapId`; never present local defaults as the design environment.
+Every QA target references a capture profile containing browser/version, operating system, CSS viewport, DPR, locale, timezone, theme, browser zoom, fonts, and load-wait condition. Use separate profiles for original baseline, wide, narrow, and zoom scenarios. Unknown environment fields remain `unknown` with a `gapId`; never present local defaults as the design environment.
 
 ruleId: QG-002
 
@@ -30,11 +30,11 @@ sectionId: acceptance-classes
 
 ruleId: QG-005
 
-Visual acceptance checks canvas, color, typography, spacing, dimensions, borders, radii, shadows, icons, images, stacking, overflow, and reference/current/overlay/diff. Each failure links page, region, severity, and repair evidence.
+Visual acceptance checks canvas, occupied content width, surplus-space allocation, column ratios, minimum dimensions, color, typography, spacing, dimensions, borders, radii, shadows, icons, images, stacking, overflow, and reference/current/overlay/diff. Broad unexplained blank space on wide screens, or squashing, clipping, and drift on narrow screens, are layout failures. Each failure links page, region, severity, and repair evidence.
 
 ruleId: QG-006
 
-Structural acceptance checks DOM/component/region/requirement/implementation mappings, page and state coverage, accessible semantics, scroll ownership, and relative paths. Visual similarity does not replace structural acceptance.
+Structural acceptance checks DOM/component/region/requirement/implementation mappings, page and state coverage, accessible semantics, fixed/fluid/bounded-fluid sizing, min/base/max dimensions, Grid/Flex growth rules, scroll ownership, and relative paths. Visual similarity does not replace structural acceptance.
 
 ruleId: QG-007
 
@@ -103,3 +103,15 @@ Structural mappings use exact-set validation: requirements, regions, components,
 ruleId: QG-020
 
 A valid `[absence:interactions]` page may have no interaction cases only when its runner supplies a resolved-gap-bound absence-check and passing assertion that no interaction IDs/cases exist. Empty cases still fail without that evidence.
+
+sectionId: elastic-layout-acceptance
+
+## Elastic layout acceptance
+
+ruleId: QG-021
+
+A wide profile verifies that fixed shell dimensions remain contracted, the main workspace consumes available width, and cards and columns distribute surplus space by contracted weights without enlarging typography/icons or scaling the whole page. When the design proves a centered cap, accept that `max-width` and its side margins; otherwise broad one-sided dead space cannot pass.
+
+ruleId: QG-022
+
+Narrow and zoom profiles verify the effective CSS viewport, component minimum dimensions, wrapping/reflow triggers, and page/region/hybrid scroll ownership. Root `transform: scale()`, extra zoom, or changed token dimensions cannot manufacture adaptation. Horizontal clipping, overlap, fixed-region drift, or unreachable content fails.

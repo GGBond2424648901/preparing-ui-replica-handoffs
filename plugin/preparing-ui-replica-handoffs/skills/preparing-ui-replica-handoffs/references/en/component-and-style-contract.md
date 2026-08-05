@@ -18,7 +18,7 @@ sectionId: shell
 
 ruleId: CS-003
 
-Define navigation, Sidebar, TopBar, breadcrumb, workspace, footer, overlay root, and notification layer with dimensions, stacking, scroll ownership, and page reuse matrix. Assign separate IDs to distinct shell types instead of forcing one shell onto every page.
+Define navigation, Sidebar, TopBar, breadcrumb, workspace, footer, overlay root, and notification layer with dimensions, stacking, scroll ownership, and page reuse matrix. Mark each as fixed, fluid, bounded-fluid, or intrinsic. Model a common fixed Sidebar and elastic main workspace separately; do not hard-code the screenshot's main-content width as a global ceiling that leaves accidental blank space on wide screens. Assign separate IDs to distinct shell types instead of forcing one shell onto every page.
 
 ruleId: CS-004
 
@@ -34,7 +34,7 @@ The registry covers navigation, cards, buttons, inputs, selectors, tags, tables,
 
 ruleId: CS-006
 
-For each component, record component ID, name, scope, anatomy, dimensions, variants, states, slots, content bounds, interactions, accessibility, tokens, icons, and consuming pages. Similar appearance remains `candidate`; share only after structure and behavior both match and are approved.
+For each component, record component ID, name, scope, anatomy, dimensions, variants, states, slots, content bounds, interactions, accessibility, tokens, icons, and consuming pages. Its sizing contract includes width mode, min/base/max width and height, `flex-grow`/`flex-shrink` or Grid-track weights, wrapping threshold, and overflow owner. Similar appearance remains `candidate`; share only after structure and behavior both match and are approved.
 
 sectionId: controls
 
@@ -87,3 +87,15 @@ Record semantic role, accessible name, focus order, keyboard actions, contrast r
 ruleId: CS-015
 
 Define shortest/longest/empty/multilingual content plus wrapping, truncation, Tooltip, and scroll behavior for text and data components. Never hide long-content problems by shrinking type or breaking column ratios.
+
+sectionId: elastic-sizing
+
+## Elastic sizing and zoom
+
+ruleId: CS-016
+
+For dashboards, card groups, table regions, chart regions, and multicolumn workspaces, record parent available width, column count, track formula such as ratios or `minmax()`, gaps, each column's min/base/max width, and surplus-space allocation. A wide screen preserves evidenced column count, order, and visual hierarchy while contracted flexible columns or cards absorb space. Do not invent extra columns without evidence or retain a fixed content width that creates broad accidental dead space.
+
+ruleId: CS-017
+
+Treat browser zoom as a change to the effective CSS viewport, not as permission to visually scale the page root or screenshot. Components may shrink according to their contract until minimum dimensions are reached; after that, select wrapping, reflow, or page/region/hybrid scrolling from evidence. Typography, icons, borders, and spacing continue to use contracted tokens without an extra scale factor.

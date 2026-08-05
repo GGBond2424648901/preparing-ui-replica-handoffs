@@ -52,6 +52,7 @@
         "evidenceLevel",
         "sourcePageIdentities",
         "anatomy",
+        "sizing",
         "variants",
         "states",
         "props",
@@ -74,6 +75,89 @@
           "items": { "type": "string", "minLength": 1 },
           "minItems": 1,
           "uniqueItems": true
+        },
+        "sizing": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "widthMode",
+            "minWidth",
+            "baseWidth",
+            "maxWidth",
+            "minHeight",
+            "baseHeight",
+            "maxHeight",
+            "trackFormula",
+            "growWeight",
+            "shrinkWeight",
+            "wrapPolicy",
+            "overflowOwner",
+            "wideViewportBehavior",
+            "zoomBehavior",
+            "evidenceLevel",
+            "gapIds"
+          ],
+          "properties": {
+            "widthMode": {
+              "enum": ["fixed", "fluid", "bounded-fluid", "intrinsic", "mixed", "unknown"]
+            },
+            "minWidth": { "type": ["number", "null"], "minimum": 0 },
+            "baseWidth": { "type": ["number", "null"], "minimum": 0 },
+            "maxWidth": { "type": ["number", "null"], "minimum": 0 },
+            "minHeight": { "type": ["number", "null"], "minimum": 0 },
+            "baseHeight": { "type": ["number", "null"], "minimum": 0 },
+            "maxHeight": { "type": ["number", "null"], "minimum": 0 },
+            "trackFormula": { "type": ["string", "null"] },
+            "growWeight": { "type": ["number", "null"], "minimum": 0 },
+            "shrinkWeight": { "type": ["number", "null"], "minimum": 0 },
+            "wrapPolicy": {
+              "enum": ["no-wrap", "wrap", "reflow", "scroll", "unknown"]
+            },
+            "overflowOwner": {
+              "enum": ["page", "region", "hybrid", "none", "unknown"]
+            },
+            "wideViewportBehavior": {
+              "enum": ["fill-available", "bounded", "preserve-fixed", "intrinsic", "unknown"]
+            },
+            "zoomBehavior": {
+              "enum": ["effective-viewport", "preserve-layout", "unknown"]
+            },
+            "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
+            "gapIds": { "$ref": "#/$defs/gapIds" }
+          },
+          "allOf": [
+            {
+              "if": {
+                "anyOf": [
+                  {
+                    "properties": { "evidenceLevel": { "const": "unknown" } },
+                    "required": ["evidenceLevel"]
+                  },
+                  {
+                    "properties": { "widthMode": { "const": "unknown" } },
+                    "required": ["widthMode"]
+                  },
+                  {
+                    "properties": { "wrapPolicy": { "const": "unknown" } },
+                    "required": ["wrapPolicy"]
+                  },
+                  {
+                    "properties": { "overflowOwner": { "const": "unknown" } },
+                    "required": ["overflowOwner"]
+                  },
+                  {
+                    "properties": { "wideViewportBehavior": { "const": "unknown" } },
+                    "required": ["wideViewportBehavior"]
+                  },
+                  {
+                    "properties": { "zoomBehavior": { "const": "unknown" } },
+                    "required": ["zoomBehavior"]
+                  }
+                ]
+              },
+              "then": { "properties": { "gapIds": { "minItems": 1 } } }
+            }
+          ]
         },
         "variants": {
           "type": "array",

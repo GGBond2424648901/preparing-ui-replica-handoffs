@@ -6,7 +6,7 @@ sectionId: capture-profile
 
 ruleId: QG-001
 
-每个 QA 目标必须引用 capture profile，记录浏览器/版本、操作系统、视口、DPR、Locale、时区、主题、缩放、字体及加载等待条件。未知环境字段保持 `unknown` 并登记 `gapId`，不能用本机默认值冒充设计环境。
+每个 QA 目标必须引用 capture profile，记录浏览器/版本、操作系统、CSS 视口、DPR、Locale、时区、主题、浏览器缩放、字体及加载等待条件。原始基线、宽屏、窄屏和缩放场景使用独立 profile；未知环境字段保持 `unknown` 并登记 `gapId`，不能用本机默认值冒充设计环境。
 
 ruleId: QG-002
 
@@ -30,11 +30,11 @@ sectionId: acceptance-classes
 
 ruleId: QG-005
 
-视觉验收检查画布、颜色、字体、间距、尺寸、边框、圆角、阴影、图标、图像、层级、溢出和 reference/current/overlay/diff。每个失败关联页面、区域、严重度和修复证据。
+视觉验收检查画布、内容占用宽度、剩余空间分配、列比例、最小尺寸、颜色、字体、间距、尺寸、边框、圆角、阴影、图标、图像、层级、溢出和 reference/current/overlay/diff。宽屏出现设计无依据的大面积空白，或窄屏出现压扁、裁切、错位，均视为布局失败；每个失败关联页面、区域、严重度和修复证据。
 
 ruleId: QG-006
 
-结构验收检查 DOM/组件/区域/需求/实现映射、页面与状态覆盖、可访问语义、滚动所有权和相对路径完整性。视觉相近不能替代结构验收。
+结构验收检查 DOM/组件/区域/需求/实现映射、页面与状态覆盖、可访问语义、固定/流式/有界流式尺寸模式、最小/基准/最大尺寸、Grid/Flex 伸缩规则、滚动所有权和相对路径完整性。视觉相近不能替代结构验收。
 
 ruleId: QG-007
 
@@ -103,3 +103,15 @@ ruleId: QG-019
 ruleId: QG-020
 
 合法 `[absence:interactions]` 页面可没有交互用例，但 runner 必须提供绑定已解决缺口的 absence-check 与“没有交互 ID/用例”的通过断言；没有该证据时空用例仍然失败。
+
+sectionId: elastic-layout-acceptance
+
+## 弹性布局验收
+
+ruleId: QG-021
+
+宽屏 profile 必须验证固定 Shell 保持合同尺寸、主工作区利用可用宽度、卡片与列按合同权重分配剩余空间，且不通过放大字体、图标或整体缩放填充。若设计明确存在居中上限，验收该 `max-width` 和两侧留白；否则大面积单侧死空白不得通过。
+
+ruleId: QG-022
+
+窄屏与缩放 profile 必须验证有效 CSS 视口、最小组件尺寸、换行/重排条件及页面/区域/混合滚动所有权。不得以根节点 `transform: scale()`、额外 zoom 或修改 token 尺寸制造“适配”；任何横向裁切、重叠、固定区域漂移或无法触达内容均失败。

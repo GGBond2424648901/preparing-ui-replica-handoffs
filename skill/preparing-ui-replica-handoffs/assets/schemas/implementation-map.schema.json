@@ -216,7 +216,7 @@
       "minItems": 1,
       "contains": {
         "type": "object",
-        "properties": { "strategy": { "const": "baseline-scroll" } },
+        "properties": { "strategy": { "enum": ["baseline-elastic", "baseline-scroll"] } },
         "required": ["strategy"]
       },
       "items": {
@@ -225,7 +225,7 @@
         "required": ["responsiveVariantId", "strategy", "targetFiles", "status", "evidenceLevel", "gapIds"],
         "properties": {
           "responsiveVariantId": { "type": "string", "minLength": 1 },
-          "strategy": { "enum": ["baseline-scroll", "responsive"] },
+          "strategy": { "enum": ["baseline-elastic", "baseline-scroll", "responsive"] },
           "targetFiles": { "$ref": "#/$defs/relativePaths" },
           "status": { "$ref": "#/$defs/lifecycleStatus" },
           "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
