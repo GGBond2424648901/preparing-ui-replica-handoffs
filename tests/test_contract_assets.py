@@ -18,13 +18,17 @@ TEMPLATE_ROOT = ASSET_ROOT / "templates"
 
 SCHEMA_NAMES = {
     "asset-manifest.schema.json",
+    "application-system.schema.json",
     "capture-profile.schema.json",
     "component-registry.schema.json",
     "design-lock.schema.json",
     "diff-regions.schema.json",
     "handoff-config.schema.json",
     "implementation-map.schema.json",
+    "implementation-plan.schema.json",
+    "micro-visual-contract.schema.json",
     "page-inventory.schema.json",
+    "reference-inventory.schema.json",
     "ui-style-contract.schema.json",
 }
 
@@ -33,6 +37,7 @@ MARKDOWN_TEMPLATE_NAMES = {
     "design-catalog.template.md",
     "page-contract.template.md",
     "ui-implementation-guide.template.md",
+    "ui-design-language.template.md",
 }
 
 EVIDENCE_LEVELS = {"direct", "derived", "candidate", "approved", "unknown"}
@@ -74,6 +79,8 @@ VALID_DOCUMENTS = {
         "outputDir": "ui-replica-handoff",
         "designVersion": "v1",
         "locales": ["zh-CN", "en-US"],
+        "targetPlatform": "desktop-web",
+        "layoutPolicy": "desktop-hybrid-elastic",
         "gitScope": _git_scope(),
     },
     "asset-manifest.schema.json": {
@@ -102,6 +109,8 @@ VALID_DOCUMENTS = {
             {
                 **_identity(),
                 "sourceAssetIds": ["A001"],
+                "referenceIds": ["REF001"],
+                "microVisualFeatureIds": [],
                 "route": {
                     "path": "/dashboard",
                     "evidenceLevel": "unknown",
@@ -129,6 +138,16 @@ VALID_DOCUMENTS = {
                         "relation": "contains",
                         "targetIds": ["instance-001"],
                         "overflow": "visible",
+                        "sizingMode": "fluid",
+                        "baseSize": 100,
+                        "maxSize": 800,
+                        "trackFormula": "minmax(0, 1fr)",
+                        "growWeight": 1,
+                        "shrinkPolicy": "preserve-min",
+                        "desktopRole": "flexible-workspace",
+                        "narrowDesktopBehavior": "page-scroll",
+                        "wideViewportBehavior": "fill-available",
+                        "zoomBehavior": "effective-viewport",
                         "evidenceLevel": "derived",
                         "gapIds": [],
                     }
@@ -184,6 +203,8 @@ VALID_DOCUMENTS = {
                     {
                         "responsiveVariantId": "desktop-base",
                         "mode": "baseline-scroll",
+                        "targetPlatform": "desktop-web",
+                        "layoutPolicy": "desktop-hybrid-elastic",
                         "minWidth": 1440,
                         "evidenceLevel": "direct",
                         "status": "approved",
@@ -221,11 +242,25 @@ VALID_DOCUMENTS = {
             "spacing": [],
             "radii": [],
             "shadows": [],
+            "borders": [],
+            "opacity": [],
+            "gradients": [],
+            "blur": [],
+            "materials": [],
+            "layers": [],
+            "motion": [],
+            "iconography": [],
+            "chartLanguage": [],
+            "density": [],
+            "backgrounds": [],
+            "forbiddenPatterns": [],
         },
         "responsiveVariants": [
             {
                 "responsiveVariantId": "desktop-base",
                 "mode": "baseline-scroll",
+                "targetPlatform": "desktop-web",
+                "layoutPolicy": "desktop-hybrid-elastic",
                 "evidenceLevel": "direct",
                 "status": "approved",
                 "gapIds": [],
@@ -235,6 +270,8 @@ VALID_DOCUMENTS = {
     },
     "component-registry.schema.json": {
         "schemaVersion": "1.0.0",
+        "targetPlatform": "desktop-web",
+        "layoutPolicy": "desktop-hybrid-elastic",
         "components": [
             {
                 "componentId": "component-hero",
@@ -242,7 +279,30 @@ VALID_DOCUMENTS = {
                 "status": "candidate",
                 "evidenceLevel": "candidate",
                 "sourcePageIdentities": [_identity()],
+                "sourceReferenceIds": ["REF001"],
+                "renderingStrategy": "dom",
+                "assetRefs": [],
                 "anatomy": ["title", "action"],
+                "sizing": {
+                    "widthMode": "fluid",
+                    "minWidth": 200,
+                    "baseWidth": 400,
+                    "maxWidth": 800,
+                    "minHeight": 100,
+                    "baseHeight": 200,
+                    "maxHeight": 400,
+                    "trackFormula": "minmax(200px, 1fr)",
+                    "growWeight": 1,
+                    "shrinkWeight": 1,
+                    "wrapPolicy": "no-wrap",
+                    "overflowOwner": "page",
+                    "desktopRole": "flexible-workspace",
+                    "narrowDesktopBehavior": "shrink-to-min",
+                    "wideViewportBehavior": "fill-available",
+                    "zoomBehavior": "effective-viewport",
+                    "evidenceLevel": "direct",
+                    "gapIds": [],
+                },
                 "variants": [
                     {
                         "variantId": "primary",
@@ -333,6 +393,8 @@ VALID_DOCUMENTS = {
                     {
                         "responsiveVariantId": "desktop-base",
                         "strategy": "baseline-scroll",
+                        "targetPlatform": "desktop-web",
+                        "layoutPolicy": "desktop-hybrid-elastic",
                         "targetFiles": ["src/pages/dashboard.tsx"],
                         "status": "approved",
                         "evidenceLevel": "direct",
@@ -350,6 +412,9 @@ VALID_DOCUMENTS = {
         "profiles": [
             {
                 "captureProfileId": "capture-desktop",
+                "purpose": "baseline",
+                "targetPlatform": "desktop-web",
+                "layoutPolicy": "desktop-hybrid-elastic",
                 "browser": "chromium",
                 "browserVersion": "pinned-by-runner",
                 "viewport": {"width": 1440, "height": 900},
@@ -357,6 +422,7 @@ VALID_DOCUMENTS = {
                 "locale": "en-US",
                 "timezone": "UTC",
                 "theme": "light",
+                "zoom": 1,
                 "fontEnvironment": ["Inter"],
                 "colorScheme": "light",
                 "reducedMotion": True,
@@ -381,8 +447,93 @@ VALID_DOCUMENTS = {
                         "status": "not-run",
                     }
                 ],
+                "microVisualTargets": [],
             }
         ],
+    },
+    "reference-inventory.schema.json": {
+        "schemaVersion": "1.0.0",
+        "references": [
+            {
+                "referenceId": "REF001",
+                "assetId": "A001",
+                "role": "page-reference",
+                "scope": "page",
+                "authorityClass": "page-specific-design",
+                "title": {"zh-CN": "仪表盘", "en-US": "Dashboard"},
+                "appliesToPageIdentities": [_identity()],
+                "shellIds": [],
+                "componentIds": [],
+                "styleSections": [],
+                "extractedRuleIds": [],
+                "status": "approved",
+                "evidenceLevel": "direct",
+                "gapIds": [],
+            }
+        ],
+    },
+    "micro-visual-contract.schema.json": {
+        "schemaVersion": "1.0.0",
+        "features": [],
+    },
+    "application-system.schema.json": {
+        "schemaVersion": "1.0.0",
+        "applicationId": "app-main",
+        "integrationMode": "single-application",
+        "runtimeMode": "single-dev-server",
+        "portPolicy": "shared-port",
+        "port": 3000,
+        "router": "react-router",
+        "defaultRoute": "/dashboard",
+        "routeEntries": [
+            {
+                **_identity(),
+                "path": "/dashboard",
+                "shellId": "shell-main",
+                "navigationEntryId": "nav-dashboard",
+                "status": "approved",
+                "evidenceLevel": "approved",
+                "gapIds": [],
+            }
+        ],
+        "shellFamilies": [],
+        "navigation": {"status": "approved"},
+        "sharedState": {"status": "approved"},
+        "sharedComponents": [],
+        "implementationSequence": ["foundation", "pages", "integration"],
+        "status": "approved",
+        "evidenceLevel": "approved",
+        "gapIds": [],
+    },
+    "implementation-plan.schema.json": {
+        "schemaVersion": "1.0.0",
+        "strategy": "foundation-then-page-by-page-in-one-application",
+        "phases": [
+            {"phaseId": "foundation", "order": 1, "name": {"zh-CN": "基础", "en-US": "Foundation"}, "deliverables": ["tokens"], "exitGate": ["approved"]},
+            {"phaseId": "pages", "order": 2, "name": {"zh-CN": "页面", "en-US": "Pages"}, "deliverables": ["pages"], "exitGate": ["accepted"]},
+            {"phaseId": "integration", "order": 3, "name": {"zh-CN": "集成", "en-US": "Integration"}, "deliverables": ["router"], "exitGate": ["reachable"]}
+        ],
+        "pageWorkItems": [
+            {
+                "workItemId": "WI001",
+                "order": 1,
+                **_identity(),
+                "dependencies": ["foundation"],
+                "route": "/dashboard",
+                "shellId": "shell-main",
+                "requiredReferenceIds": ["REF001"],
+                "requiredMicroVisualFeatureIds": [],
+                "gates": {
+                    "contractComplete": "pass",
+                    "structural": "pass",
+                    "visual": "pass",
+                    "interaction": "pass",
+                    "integratedNavigation": "pass"
+                },
+                "status": "accepted",
+                "gapIds": []
+            }
+        ]
     },
     "design-lock.schema.json": {
         "schemaVersion": "1.0.0",
@@ -490,6 +641,8 @@ RESPONSIVE_CASES = (
             "responsiveVariantId": "tablet-approved",
             "mode": "responsive",
             "minWidth": 768,
+            "targetPlatform": "desktop-web",
+            "layoutPolicy": "desktop-hybrid-elastic",
             "evidenceLevel": "derived",
             "status": "approved",
             "gapIds": [],
@@ -502,6 +655,8 @@ RESPONSIVE_CASES = (
         {
             "responsiveVariantId": "tablet-approved",
             "mode": "responsive",
+            "targetPlatform": "desktop-web",
+            "layoutPolicy": "desktop-hybrid-elastic",
             "evidenceLevel": "derived",
             "status": "approved",
             "gapIds": [],
@@ -514,6 +669,8 @@ RESPONSIVE_CASES = (
         {
             "responsiveVariantId": "tablet-approved",
             "strategy": "responsive",
+            "targetPlatform": "desktop-web",
+            "layoutPolicy": "desktop-hybrid-elastic",
             "targetFiles": ["src/pages/dashboard.tsx"],
             "status": "approved",
             "evidenceLevel": "derived",
