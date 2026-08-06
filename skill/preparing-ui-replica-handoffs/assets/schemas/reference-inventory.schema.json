@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UI reference inventory and authority classification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "references"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "references": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/reference" }
+    }
+  },
+  "$defs": {
+    "evidenceLevel": { "enum": ["direct", "derived", "candidate", "approved", "unknown"] },
+    "status": { "enum": ["unknown", "proposed", "candidate", "approved"] },
+    "gapIds": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^G[0-9]{3,}$" },
+      "uniqueItems": true
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pageId", "stateId", "variantId"],
+      "properties": {
+        "pageId": { "type": "string", "pattern": "^P[0-9]{3,}$" },
+        "stateId": { "type": "string", "pattern": "^S[0-9]{2,}$" },
+        "variantId": { "type": "string", "pattern": "^V[0-9]{2,}$" }
+      }
+    },
+    "localizedText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["zh-CN", "en-US"],
+      "properties": {
+        "zh-CN": { "type": "string" },
+        "en-US": { "type": "string" }
+      }
+    },
+    "bounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "referenceId", "assetId", "role", "scope", "authorityClass",
+        "title", "titleEvidence", "designLanguageSetIds", "version", "theme", "module", "disposition",
+        "appliesToPageIdentities", "shellIds", "componentIds",
+        "styleSections", "extractedRuleIds", "status", "evidenceLevel", "gapIds"
+      ],
+      "properties": {
+        "referenceId": { "type": "string", "pattern": "^REF[0-9]{3,}$" },
+        "assetId": { "type": "string", "pattern": "^A[0-9]{3,}$" },
+        "role": {
+          "enum": [
+            "page-reference", "design-language-reference", "component-board",
+            "brand-reference", "interaction-state-board", "motion-reference",
+            "decorative-background", "content-asset", "unknown"
+          ]
+        },
+        "scope": { "enum": ["global", "shell", "module", "component", "page", "state", "variant", "unknown"] },
+        "authorityClass": {
+          "enum": [
+            "user-correction", "page-specific-design", "shared-design-language",
+            "component-board", "brand-asset", "supporting-product-evidence", "unknown"
+          ]
+        },
+        "title": { "$ref": "#/$defs/localizedText" },
+        "titleEvidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["classification", "transcription", "bounds", "evidenceLevel", "gapIds"],
+          "properties": {
+            "classification": { "enum": ["visible-title", "no-visible-title", "unknown"] },
+            "transcription": { "$ref": "#/$defs/localizedText" },
+            "bounds": { "anyOf": [{ "$ref": "#/$defs/bounds" }, { "type": "null" }] },
+            "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
+            "gapIds": { "$ref": "#/$defs/gapIds" }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "classification": { "const": "visible-title" } } },
+              "then": { "properties": { "bounds": { "$ref": "#/$defs/bounds" } } }
+            },
+            {
+              "if": { "anyOf": [
+                { "properties": { "classification": { "const": "unknown" } } },
+                { "properties": { "evidenceLevel": { "const": "unknown" } } }
+              ] },
+              "then": { "properties": { "gapIds": { "minItems": 1 } } }
+            }
+          ]
+        },
+        "designLanguageSetIds": { "type": "array", "items": { "type": "string", "pattern": "^DLS[0-9]{3,}$" }, "uniqueItems": true },
+        "version": { "type": ["string", "null"] },
+        "theme": { "type": ["string", "null"] },
+        "module": { "type": ["string", "null"] },
+        "disposition": { "enum": ["page-candidate", "reference-only", "content-asset", "unknown"] },
+        "appliesToPageIdentities": { "type": "array", "items": { "$ref": "#/$defs/identity" } },
+        "shellIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "componentIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "styleSections": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "principles", "color", "typography", "spacing", "radii", "borders",
+              "shadows", "materials", "layers", "shell", "iconography", "brand",
+              "charts", "motion", "states", "density", "backgrounds", "accessibility"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "extractedRuleIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "status": { "$ref": "#/$defs/status" },
+        "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
+        "gapIds": { "$ref": "#/$defs/gapIds" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "anyOf": [
+              { "properties": { "role": { "const": "unknown" } }, "required": ["role"] },
+              { "properties": { "scope": { "const": "unknown" } }, "required": ["scope"] },
+              { "properties": { "authorityClass": { "const": "unknown" } }, "required": ["authorityClass"] }
+            ]
+          },
+          "then": { "properties": { "gapIds": { "minItems": 1 } } }
+        }
+      ]
+    }
+  }
+}

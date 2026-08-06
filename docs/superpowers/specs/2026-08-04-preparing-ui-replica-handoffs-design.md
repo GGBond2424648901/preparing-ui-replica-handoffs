@@ -6,9 +6,13 @@
 
 用户提供 UI 设计稿图片、截图、Figma 导出图或 AI 生成稿后，Skill 将其整理为中英双语、机器可读、可冻结、可验证的 UI 复刻交付包，使后续开发 Agent 能在明确证据边界内实施页面，而不需要自行猜测页面、状态、布局、文案、组件、路由、交互或验收规则。
 
-安装位置：`C:\Users\PC\.codex\skills\preparing-ui-replica-handoffs`。
+最终分发形态为个人 Codex 插件，插件内只携带本 Skill，不增加 MCP、App 或 Hook。
 
-可分发备份：`D:\AI_Demo\Result\preparing-ui-replica-handoffs.zip`。
+插件源码/安装位置：`C:\Users\PC\plugins\preparing-ui-replica-handoffs`。
+
+个人 marketplace：`C:\Users\PC\.agents\plugins\marketplace.json`。
+
+可分发备份：`D:\AI_Demo\Result\preparing-ui-replica-handoffs-plugin.zip`。
 
 ## 2. 非目标
 
@@ -28,7 +32,7 @@
 5. 清晰文案照录；业务已确认文案引用正式资料；无法识别文案使用长度相近的推断文案并标记 `inferred`，同时保留原图坐标与缺口编号。
 6. 设计稿示例数据默认分类为 `sample`，不能据此虚构 API、公式、权限或生产事实。
 7. 坐标是参考边界，不是全页面绝对定位指令；必须同时记录容器、Grid/Flex、比例、间距、最小尺寸和滚动关系。
-8. 原始画布基线与响应式变体分离。原始宽度不足时默认保留几何并滚动；响应式只有在有证据或批准时才建立独立变体。
+8. 原始画布基线与弹性布局、响应式变体分离。默认采用 `desktop-web` + `desktop-hybrid-elastic`：固定/粘性 Shell → 流式或有界流式主工作区 → 组件最小/基准/最大尺寸 → 按功能归属的整页/模块/混合滚动 → 获批重排。原始画布是测量基线而非固定容器或尺寸上限；宽屏按证据利用空间但不无限拉伸文本和卡片，窄桌面/浏览器放大先收缩到下限再滚动或执行获批重排。移动端单列必须是独立变体，禁止根节点整体缩放以及任意压缩或裁切。
 9. 未展示状态必须登记为 `unknown` 或 `proposed`，不能默认复制通用 Loading、Empty、Error、Forbidden、Modal 或 Drawer。
 10. 验收使用 reference/current/overlay/diff、DOM/区域/功能映射和交互用例三类证据；缺一类不能宣称完整通过。
 11. 验收失败关闭；存在未解决的 blocker/major 缺口时不得生成“已完成”声明。
@@ -225,4 +229,15 @@ ui-replica-handoff/
 - 模板和 Schema 能覆盖原图、页面、状态、变体、组件、文案、数据、布局、交互、响应式、环境、Diff、Git 范围和缺口审批。
 - 真实 16 图样例可生成完整初始交付包，现有源图和原交付包哈希不变。
 - 前向测试 Agent 按统一结构执行，不依赖任何外部 UI 复刻 Skill。
-- ZIP 与安装目录内容一致。
+- 插件包含有效的 `.codex-plugin/plugin.json`，其 `skills` 指向内置的 `./skills/`，不声明不存在的 MCP、App 或 Hook。
+- 个人 marketplace 以追加方式登记本插件，不修改已有插件条目。
+- 插件通过官方插件校验，内置 Skill 通过官方 Skill 校验。
+- ZIP 与个人插件安装目录内容一致。
+
+## 14. 设计语言权威与逐页精确升级
+
+设计输入不再被假定为“全部都是页面截图”。每个资产先获得 `REF###`，并分类为页面参考图、UI 设计语言图、组件板、品牌板、交互状态板、动效参考、装饰背景、内容资产或 unknown。设计语言图单独形成中英双语 `UI设计语言.md` / `UI-Design-Language.md`，逐条记录原则、材质、Token、Shell、Logo/图标、图表、动效、状态、作用域、例外和冲突。页面继承适用的共享规则，再叠加页面直接证据；用户修正和页面专属设计优先。
+
+新增 `micro-visual-contract.json`，按特征记录图标描边、Logo 留白、曲线控制点、圆环和圆柱比例、边框/圆角/阴影/透明度、渐变、裁切、Mask、层级、渲染策略、响应式行为和 Diff 容差。Logo/专有图形优先 SVG，普通图标使用锁定图标库，简单材质使用 CSS，精确曲线/图表优先 SVG，高密度动态图形可使用 Canvas，环境装饰可使用本地光栅图。登录页可使用一张纯装饰完整背景加真实 DOM 交互层，但禁止将含控件、文字、数据或状态的整页截图当成实现。
+
+新增 `application-system.json` 与 `implementation-plan.json`，固定“共享视觉基础 → 逐页复刻 → 系统集成”的交付顺序。最终页面必须通过统一 Router 运行在一个应用、一个开发服务器和共享端口中；每页执行合同完整性、结构、视觉、交互与集成导航五类门禁，不能以独立端口 Demo 作为最终交付。

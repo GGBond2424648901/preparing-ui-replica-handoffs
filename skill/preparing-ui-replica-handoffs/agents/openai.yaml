@@ -1,0 +1,4 @@
+interface:
+  display_name: "UI 复刻交付准备 / UI Replica Handoff Prep"
+  short_description: "多图设计语言+导航+动效的中英 UI 复刻交付 / Bilingual evidence-graph UI handoff"
+  default_prompt: "Use $preparing-ui-replica-handoffs to classify all design images, merge multiple authoritative UI design-language boards into evidence-scoped rule sets, reconcile and freeze navigation, and prepare a bilingual desktop-Web-first handoff with per-page micro-visual, semantic status/grade encoding, material, motion, mixed-layout, traceability, and single-application contracts."

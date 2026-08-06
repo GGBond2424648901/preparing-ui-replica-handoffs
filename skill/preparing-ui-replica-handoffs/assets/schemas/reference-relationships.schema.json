@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UI reference relationship graph",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "relationships"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "relationships": { "type": "array", "items": { "$ref": "#/$defs/relationship" } }
+  },
+  "$defs": {
+    "localizedText": {
+      "type": "object", "additionalProperties": false, "required": ["zh-CN", "en-US"],
+      "properties": { "zh-CN": { "type": "string" }, "en-US": { "type": "string" } }
+    },
+    "bounds": {
+      "type": "object", "additionalProperties": false, "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "number" }, "y": { "type": "number" },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "gapIds": { "type": "array", "items": { "type": "string", "pattern": "^G[0-9]{3,}$" }, "uniqueItems": true },
+    "relationship": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "relationshipId", "fromReferenceId", "toReferenceId", "type", "direction",
+        "sourceBounds", "rationale", "status", "evidenceLevel", "gapIds"
+      ],
+      "properties": {
+        "relationshipId": { "type": "string", "pattern": "^RR[0-9]{3,}$" },
+        "fromReferenceId": { "type": "string", "pattern": "^REF[0-9]{3,}$" },
+        "toReferenceId": { "type": "string", "pattern": "^REF[0-9]{3,}$" },
+        "type": {
+          "enum": [
+            "same-page-continuation", "detail-of", "state-of", "variant-of", "responsive-of",
+            "overlay-of", "design-language-for", "component-source-for", "brand-source-for",
+            "duplicates", "complements", "supersedes", "conflicts-with", "derived-from"
+          ]
+        },
+        "direction": { "enum": ["directed", "bidirectional"] },
+        "sourceBounds": { "anyOf": [{ "$ref": "#/$defs/bounds" }, { "type": "null" }] },
+        "rationale": { "$ref": "#/$defs/localizedText" },
+        "status": { "enum": ["unknown", "proposed", "candidate", "approved"] },
+        "evidenceLevel": { "enum": ["direct", "derived", "candidate", "approved", "unknown"] },
+        "gapIds": { "$ref": "#/$defs/gapIds" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "anyOf": [
+              { "properties": { "status": { "enum": ["unknown", "proposed"] } } },
+              { "properties": { "evidenceLevel": { "const": "unknown" } } }
+            ]
+          },
+          "then": { "properties": { "gapIds": { "minItems": 1 } } }
+        }
+      ]
+    }
+  }
+}

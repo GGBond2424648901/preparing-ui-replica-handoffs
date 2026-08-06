@@ -1,0 +1,38 @@
+{
+  "name": "preparing-ui-replica-handoffs",
+  "version": "1.0.0+codex.20260806040539",
+  "description": "\u4e2d\u6587/English UI \u8bc1\u636e\u56fe\u8c31\u3001\u591a\u8bbe\u8ba1\u8bed\u8a00\u56fe\u3001\u5bfc\u822a\u51bb\u7ed3\u3001\u5fae\u89c6\u89c9\u4e0e\u52a8\u6548\u590d\u523b\u4ea4\u4ed8\u63d2\u4ef6",
+  "author": {
+    "name": "Personal"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "UI \u590d\u523b\u4ea4\u4ed8\u51c6\u5907 / UI Replica Handoff Prep",
+    "shortDescription": "\u4e2d\u6587/English \u591a\u56fe\u8bbe\u8ba1\u8bed\u8a00+\u5bfc\u822a+\u52a8\u6548 UI \u590d\u523b\u4ea4\u4ed8",
+    "longDescription": "\u4ece\u9875\u9762\u56fe\u3001\u591a\u5f20 UI \u8bbe\u8ba1\u8bed\u8a00\u56fe\u3001\u7ec4\u4ef6/\u54c1\u724c/\u72b6\u6001/\u52a8\u6548\u677f\u6784\u5efa\u8bc1\u636e\u56fe\u8c31\uff0c\u8f93\u51fa\u4e2d\u82f1\u53cc\u8bed\u4e3b\u4f53\u6750\u8d28\u3001\u5bfc\u822a\u51bb\u7ed3\u3001\u9010\u9875\u5fae\u89c6\u89c9\u3001\u63a7\u4ef6\u7ee7\u627f\u3001\u52a8\u6548\u3001\u6df7\u5408\u5e03\u5c40\u3001\u5355\u5e94\u7528\u8def\u7531\u4e0e Diff \u9a8c\u6536\u5408\u540c\u3002",
+    "developerName": "Personal",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Bilingual UI handoff",
+      "Design-language authority classification",
+      "Multiple design-language board merging",
+      "Evidence graph and viewport calibration",
+      "Navigation reconciliation and freeze",
+      "Material-language control inheritance",
+      "Motion and micro-interaction contracts",
+      "Semantic status and grade visual encoding",
+      "Deterministic capture fixtures",
+      "End-to-end traceability",
+      "Per-page micro-visual contracts",
+      "SVG CSS Canvas asset strategy",
+      "Single-application route planning",
+      "Elastic layout contracts",
+      "Desktop Web mixed layouts",
+      "Evidence validation"
+    ],
+    "defaultPrompt": [
+      "\u4f7f\u7528 $preparing-ui-replica-handoffs \u4ece\u8fd9\u4e9b\u8bbe\u8ba1\u56fe\u7247\u751f\u6210\u4e2d\u82f1\u53cc\u8bed UI \u590d\u523b\u4ea4\u4ed8\u5305\u3002",
+      "Use $preparing-ui-replica-handoffs to prepare a bilingual UI replica handoff from these design images."
+    ]
+  }
+}

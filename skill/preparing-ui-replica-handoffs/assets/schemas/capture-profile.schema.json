@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UI capture environment profiles",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "profiles"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/profile" }
+    }
+  },
+  "$defs": {
+    "evidenceLevel": {
+      "enum": ["direct", "derived", "candidate", "approved", "unknown"]
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "captureProfileId",
+        "purpose",
+        "targetPlatform",
+        "layoutPolicy",
+        "browser",
+        "browserVersion",
+        "viewport",
+        "dpr",
+        "locale",
+        "timezone",
+        "theme",
+        "zoom",
+        "fontEnvironment",
+        "colorScheme",
+        "reducedMotion",
+        "evidenceLevel",
+        "gapIds"
+      ],
+      "properties": {
+        "captureProfileId": { "type": "string", "minLength": 1 },
+        "purpose": { "enum": ["baseline", "wide", "narrow", "zoom", "custom"] },
+        "targetPlatform": {
+          "enum": ["desktop-web", "mobile-web", "responsive-web", "desktop-native", "unknown"]
+        },
+        "layoutPolicy": {
+          "enum": ["desktop-hybrid-elastic", "fully-fluid", "fixed-baseline", "evidence-defined", "unknown"]
+        },
+        "browser": { "type": "string", "minLength": 1 },
+        "browserVersion": { "type": "string", "minLength": 1 },
+        "viewport": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["width", "height"],
+          "properties": {
+            "width": { "type": "integer", "minimum": 1 },
+            "height": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "dpr": { "type": "number", "exclusiveMinimum": 0 },
+        "locale": { "type": "string", "minLength": 1 },
+        "timezone": { "type": "string", "minLength": 1 },
+        "theme": { "enum": ["light", "dark", "system", "unknown"] },
+        "zoom": {
+          "oneOf": [
+            { "type": "number", "exclusiveMinimum": 0 },
+            { "const": "unknown" }
+          ]
+        },
+        "fontEnvironment": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "colorScheme": { "enum": ["light", "dark", "no-preference"] },
+        "reducedMotion": { "type": "boolean" },
+        "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
+        "gapIds": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^G[0-9]{3,}$" },
+          "uniqueItems": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "anyOf": [
+              {
+                "properties": { "evidenceLevel": { "const": "unknown" } },
+                "required": ["evidenceLevel"]
+              },
+              {
+                "properties": { "theme": { "const": "unknown" } },
+                "required": ["theme"]
+              },
+              {
+                "properties": { "zoom": { "const": "unknown" } },
+                "required": ["zoom"]
+              },
+              {
+                "properties": { "targetPlatform": { "const": "unknown" } },
+                "required": ["targetPlatform"]
+              },
+              {
+                "properties": { "layoutPolicy": { "const": "unknown" } },
+                "required": ["layoutPolicy"]
+              }
+            ]
+          },
+          "then": { "properties": { "gapIds": { "minItems": 1 } } }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UI design-language set and rule cascade",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "designLanguageSets", "rules", "conflicts"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "designLanguageSets": { "type": "array", "items": { "$ref": "#/$defs/designLanguageSet" } },
+    "rules": { "type": "array", "items": { "$ref": "#/$defs/rule" } },
+    "conflicts": { "type": "array", "items": { "$ref": "#/$defs/conflict" } }
+  },
+  "$defs": {
+    "localizedText": { "type": "object", "additionalProperties": false, "required": ["zh-CN", "en-US"], "properties": { "zh-CN": { "type": "string" }, "en-US": { "type": "string" } } },
+    "identity": { "type": "object", "additionalProperties": false, "required": ["pageId", "stateId", "variantId"], "properties": { "pageId": { "type": "string", "pattern": "^P[0-9]{3,}$" }, "stateId": { "type": "string", "pattern": "^S[0-9]{2,}$" }, "variantId": { "type": "string", "pattern": "^V[0-9]{2,}$" } } },
+    "bounds": { "type": "object", "additionalProperties": false, "required": ["x", "y", "width", "height"], "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "width": { "type": "number", "exclusiveMinimum": 0 }, "height": { "type": "number", "exclusiveMinimum": 0 } } },
+    "gapIds": { "type": "array", "items": { "type": "string", "pattern": "^G[0-9]{3,}$" }, "uniqueItems": true },
+    "designLanguageSet": {
+      "type": "object", "additionalProperties": false,
+      "required": ["designLanguageSetId", "name", "referenceIds", "version", "theme", "module", "scope", "mergeStrategy", "ruleIds", "status", "evidenceLevel", "gapIds"],
+      "properties": {
+        "designLanguageSetId": { "type": "string", "pattern": "^DLS[0-9]{3,}$" },
+        "name": { "$ref": "#/$defs/localizedText" },
+        "referenceIds": { "type": "array", "items": { "type": "string", "pattern": "^REF[0-9]{3,}$" }, "minItems": 1, "uniqueItems": true },
+        "version": { "type": ["string", "null"] }, "theme": { "type": ["string", "null"] }, "module": { "type": ["string", "null"] },
+        "scope": { "enum": ["global", "shell", "module", "component", "page", "state", "variant"] },
+        "mergeStrategy": { "const": "evidence-graph" },
+        "ruleIds": { "type": "array", "items": { "type": "string", "pattern": "^DR[0-9]{3,}$" }, "uniqueItems": true },
+        "status": { "enum": ["unknown", "proposed", "candidate", "approved"] },
+        "evidenceLevel": { "enum": ["direct", "derived", "candidate", "approved", "unknown"] },
+        "gapIds": { "$ref": "#/$defs/gapIds" }
+      }
+    },
+    "rule": {
+      "type": "object", "additionalProperties": false,
+      "required": ["ruleId", "designLanguageSetId", "category", "name", "value", "sourceEvidence", "scope", "module", "theme", "version", "precedence", "exceptionPageIdentities", "affectedTokenIds", "affectedComponentIds", "affectedPageIdentities", "conflictIds", "status", "evidenceLevel", "gapIds"],
+      "properties": {
+        "ruleId": { "type": "string", "pattern": "^DR[0-9]{3,}$" },
+        "designLanguageSetId": { "type": "string", "pattern": "^DLS[0-9]{3,}$" },
+        "category": { "enum": ["principles", "color", "typography", "spacing", "radii", "borders", "shadows", "materials", "layers", "shell", "iconography", "brand", "charts", "motion", "states", "density", "backgrounds", "accessibility", "forbidden"] },
+        "name": { "$ref": "#/$defs/localizedText" }, "value": {},
+        "sourceEvidence": {
+          "type": "array", "minItems": 1,
+          "items": { "type": "object", "additionalProperties": false, "required": ["referenceId", "bounds"], "properties": { "referenceId": { "type": "string", "pattern": "^REF[0-9]{3,}$" }, "bounds": { "$ref": "#/$defs/bounds" } } }
+        },
+        "scope": { "enum": ["global", "shell", "module", "component", "page", "state", "variant"] },
+        "module": { "type": ["string", "null"] }, "theme": { "type": ["string", "null"] }, "version": { "type": ["string", "null"] },
+        "precedence": { "type": "integer" },
+        "exceptionPageIdentities": { "type": "array", "items": { "$ref": "#/$defs/identity" } },
+        "affectedTokenIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "affectedComponentIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "affectedPageIdentities": { "type": "array", "items": { "$ref": "#/$defs/identity" } },
+        "conflictIds": { "type": "array", "items": { "type": "string", "pattern": "^DRC[0-9]{3,}$" }, "uniqueItems": true },
+        "status": { "enum": ["unknown", "proposed", "candidate", "approved"] },
+        "evidenceLevel": { "enum": ["direct", "derived", "candidate", "approved", "unknown"] },
+        "gapIds": { "$ref": "#/$defs/gapIds" }
+      }
+    },
+    "conflict": {
+      "type": "object", "additionalProperties": false,
+      "required": ["conflictId", "ruleIds", "referenceIds", "resolutionStatus", "winnerRuleId", "winningEvidenceReferenceIds", "rationale", "status", "evidenceLevel", "gapIds"],
+      "properties": {
+        "conflictId": { "type": "string", "pattern": "^DRC[0-9]{3,}$" },
+        "ruleIds": { "type": "array", "items": { "type": "string", "pattern": "^DR[0-9]{3,}$" }, "minItems": 2, "uniqueItems": true },
+        "referenceIds": { "type": "array", "items": { "type": "string", "pattern": "^REF[0-9]{3,}$" }, "minItems": 2, "uniqueItems": true },
+        "resolutionStatus": { "enum": ["open", "resolved"] },
+        "winnerRuleId": { "type": ["string", "null"], "pattern": "^DR[0-9]{3,}$" },
+        "winningEvidenceReferenceIds": { "type": "array", "items": { "type": "string", "pattern": "^REF[0-9]{3,}$" }, "uniqueItems": true },
+        "rationale": { "$ref": "#/$defs/localizedText" },
+        "status": { "enum": ["unknown", "proposed", "candidate", "approved"] },
+        "evidenceLevel": { "enum": ["direct", "derived", "candidate", "approved", "unknown"] },
+        "gapIds": { "$ref": "#/$defs/gapIds" }
+      },
+      "allOf": [{ "if": { "properties": { "resolutionStatus": { "const": "resolved" } } }, "then": { "properties": { "winnerRuleId": { "type": "string" }, "winningEvidenceReferenceIds": { "minItems": 1 } } } }]
+    }
+  }
+}

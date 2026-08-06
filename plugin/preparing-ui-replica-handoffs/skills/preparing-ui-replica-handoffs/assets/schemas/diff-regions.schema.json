@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UI visual diff regions",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "pages"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/pageDiff" }
+    }
+  },
+  "$defs": {
+    "qaStatus": { "enum": ["not-run", "pass", "fail", "blocked"] },
+    "bounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "pageDiff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pageId", "stateId", "variantId", "captureProfileId", "regions", "microVisualTargets", "motionTargets", "semanticTargets"],
+      "properties": {
+        "pageId": { "type": "string", "pattern": "^P[0-9]{3,}$" },
+        "stateId": { "type": "string", "pattern": "^S[0-9]{2,}$" },
+        "variantId": { "type": "string", "pattern": "^V[0-9]{2,}$" },
+        "captureProfileId": { "type": "string", "minLength": 1 },
+        "regions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "regionId",
+              "bounds",
+              "comparisonModes",
+              "evidenceTypes",
+              "comparisonType",
+              "dynamicMaskIds",
+              "antiAliasing",
+              "textTolerance",
+              "geometryTolerancePx",
+              "materialChecks",
+              "tolerance",
+              "status"
+            ],
+            "properties": {
+              "regionId": { "type": "string", "minLength": 1 },
+              "bounds": { "$ref": "#/$defs/bounds" },
+              "comparisonModes": {
+                "type": "array",
+                "items": { "enum": ["reference", "current", "overlay", "diff"] },
+                "minItems": 1,
+                "uniqueItems": true
+              },
+              "evidenceTypes": {
+                "type": "array",
+                "items": { "enum": ["visual", "structural", "interaction"] },
+                "minItems": 1,
+                "uniqueItems": true
+              },
+              "comparisonType": { "enum": ["pixel", "structural", "mixed"] },
+              "dynamicMaskIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+              "antiAliasing": {
+                "type": "object", "additionalProperties": false,
+                "required": ["allowEnvironmentNoise", "rationale"],
+                "properties": {
+                  "allowEnvironmentNoise": { "type": "boolean" },
+                  "rationale": { "type": ["string", "null"] }
+                }
+              },
+              "textTolerance": {
+                "type": "object", "additionalProperties": false,
+                "required": ["maxShiftPx", "fontRasterizationOnly"],
+                "properties": {
+                  "maxShiftPx": { "type": "number", "minimum": 0 },
+                  "fontRasterizationOnly": { "type": "boolean" }
+                }
+              },
+              "geometryTolerancePx": { "type": "number", "minimum": 0 },
+              "materialChecks": {
+                "type": "array",
+                "items": { "enum": ["background", "blur", "opacity", "tint", "saturation", "border", "highlight", "shadow", "noise", "layering"] },
+                "uniqueItems": true
+              },
+              "tolerance": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["pixelRatio"],
+                "properties": {
+                  "pixelRatio": { "type": "number", "minimum": 0, "maximum": 1 }
+                }
+              },
+              "status": { "$ref": "#/$defs/qaStatus" }
+            }
+          }
+        },
+        "microVisualTargets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["featureId", "comparisonModes", "geometryTolerancePx", "status"],
+            "properties": {
+              "featureId": { "type": "string", "pattern": "^MV[0-9]{3,}$" },
+              "comparisonModes": {
+                "type": "array",
+                "items": { "enum": ["reference", "current", "overlay", "diff"] },
+                "minItems": 1,
+                "uniqueItems": true
+              },
+              "geometryTolerancePx": { "type": "number", "minimum": 0 },
+              "status": { "$ref": "#/$defs/qaStatus" }
+            }
+          }
+        },
+        "motionTargets": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["motionId", "requiredFrames", "timingToleranceMs", "status"],
+            "properties": {
+              "motionId": { "type": "string", "pattern": "^MOT[0-9]{3,}$" },
+              "requiredFrames": {
+                "type": "array", "minItems": 2, "uniqueItems": true,
+                "items": { "enum": ["start", "intermediate", "end", "reduced-motion"] }
+              },
+              "timingToleranceMs": { "type": "number", "minimum": 0 },
+              "status": { "$ref": "#/$defs/qaStatus" }
+            }
+          }
+        },
+        "semanticTargets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["semanticValueId", "comparisonModes", "colorToleranceDeltaE", "geometryTolerancePx", "contrastChecked", "status"],
+            "properties": {
+              "semanticValueId": { "type": "string", "pattern": "^SEMVAL[0-9]{3,}$" },
+              "comparisonModes": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": { "enum": ["reference", "current", "overlay", "diff"] }
+              },
+              "colorToleranceDeltaE": { "type": "number", "minimum": 0 },
+              "geometryTolerancePx": { "type": "number", "minimum": 0 },
+              "contrastChecked": { "type": "boolean" },
+              "status": { "$ref": "#/$defs/qaStatus" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
