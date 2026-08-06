@@ -115,3 +115,39 @@ Beyond region bounds, each page contract enumerates visible micro features: icon
 ruleId: PS-019
 
 Each page contract declares its unified-application route, shell, navigation entry, shared state/components, page dependencies, and integration acceptance. A page may be developed and captured separately, but cannot remain on its own port or as an isolated demo outside the unified Router.
+
+sectionId: page-evidence-graph
+
+## Page evidence-graph bindings
+
+ruleId: PS-020
+
+Every page identity lists `referenceRelationshipIds`, `calibrationIds`, `inheritedDesignRuleIds`, `inconsistencyIds`, `fixtureIds`, `traceabilityIds`, `navigationSystemIds`, and `motionIds`. Region coordinates use the calibrated real UI viewport; source-image frames, redlines, explanatory copy, and device chrome never become component bounds.
+
+ruleId: PS-021
+
+A page inherits the applicable governing design language before adding page-direct evidence. Every button, search, selection control, navigation item, card, and other instance traces to its component, tokens, and `DR###`. A page exception states overridden fields and source evidence instead of bypassing the shared language with copied local styling.
+
+sectionId: page-navigation-and-motion
+
+## Page navigation and motion states
+
+ruleId: PS-022
+
+A page references only reconciled canonical navigation entries and declares its selected item, expanded parent, permission-visible items, labels/icons, and target routes. A navigation item that is incidentally missing or extra in one screenshot does not become page-specific until the discrepancy contract resolves it.
+
+ruleId: PS-023
+
+Page hover, focus-visible, pressed, selected, loading, expand/collapse, and overlay enter/exit states reference `MOT###`. Interaction acceptance covers motion start, intermediate key state, finish, timing, and Reduced Motion in addition to the result; a static screenshot cannot replace replayable state acceptance.
+
+sectionId: page-semantic-visuals
+
+## Page semantic-visual usage contract
+
+ruleId: PS-024
+
+Pages declare used semantic dimensions through `semanticDimensionIds` and list the exact values visible in that page/state/variant through `semanticValueIds`. Table columns, filters, detail labels, metric cards, and dialogs reference the same `SEMVAL###` rather than copying approximate local colors; page-specific exceptions require direct evidence.
+
+ruleId: PS-025
+
+Semantic labels cover default view, selected/filter use, hover, focus-visible, disabled, long copy, locale variants, light/dark carriers, and high-contrast conditions. Different dimensions such as priority, workflow status, and evidence grade never exchange meaning even when they share a hue. Every visible `SEMVAL###` on an approved page has a `semanticTargets` Diff.

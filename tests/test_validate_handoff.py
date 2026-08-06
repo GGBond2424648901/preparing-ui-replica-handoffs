@@ -1,3 +1,4 @@
+import copy
 import csv
 import hashlib
 import io
@@ -81,6 +82,7 @@ SECTION_CONTRACT_FIELDS = {
         "stateId",
         "variantId",
         "sourceAssetIds",
+        "referenceIds",
         "route",
         "evidenceLevel",
         "status",
@@ -92,6 +94,13 @@ SECTION_CONTRACT_FIELDS = {
         "interactions",
         "responsiveVariants",
     ),
+    "micro-visual-contract": (
+        "referenceIds",
+        "microVisualFeatureIds",
+        "semanticDimensionIds",
+        "semanticValueIds",
+    ),
+    "application-integration": ("route", "shell", "components"),
     "qa-and-gaps": ("acceptanceCriteria", "gapIds"),
 }
 
@@ -123,6 +132,8 @@ def _write_complete_page_documents(handoff, page, registry):
                 "canvas-shell-regions": "本节定义原生画布、应用外壳和完整区域边界；开发时保持坐标、尺寸、滚动方式与区域层级关系不变。",
                 "layout-copy-icons-data": "本节记录布局关系、可见文案、图标语义和数据形状；每一项均按设计证据实现并用于逐项视觉验收。",
                 "components-interactions-responsive": "本节约束组件实例、交互结果和响应式变体；实现必须使用登记组件并准确复现声明的用户操作结果。",
+                "micro-visual-contract": "本节绑定页面参考图与微视觉特征，图标描边、曲线、圆环、边框、圆角、阴影、透明度和层级都必须逐项复核。",
+                "application-integration": "本节说明页面如何接入统一应用路由、共享外壳与组件系统，确保所有页面在同一端口内形成连续的软件体验。",
                 "qa-and-gaps": "本节列出可执行验收标准和已解析缺口；页面只有在全部证据检查通过且缺口有明确结论后才能交付。",
             }
         else:
@@ -131,6 +142,8 @@ def _write_complete_page_documents(handoff, page, registry):
                 "canvas-shell-regions": "This section defines the native canvas, application shell, and complete region boundaries, including dimensions, hierarchy, and scrolling behavior.",
                 "layout-copy-icons-data": "This section records layout relationships, visible copy, icon meaning, and data shapes that must be implemented and visually verified item by item.",
                 "components-interactions-responsive": "This section contracts component instances, interaction outcomes, and responsive variants so registered components reproduce every declared behavior accurately.",
+                "micro-visual-contract": "This section binds source references to icon strokes, curves, rings, borders, radii, shadows, opacity, clipping, and layer details for exact inspection.",
+                "application-integration": "This section explains how the page joins the shared router, shell, and component system so every screen behaves as one application on one port.",
                 "qa-and-gaps": "This section lists executable acceptance criteria and resolved gaps; delivery is allowed only when all bound evidence checks pass without ambiguity.",
             }
         section_values = {
@@ -161,6 +174,15 @@ def _write_complete_page_documents(handoff, page, registry):
                 *(item["interactionId"] for item in page["interactions"]),
                 *(item["outcome"][locale_code] for item in page["interactions"]),
                 *(item["responsiveVariantId"] for item in page["responsiveVariants"]),
+            ],
+            "micro-visual-contract": [
+                *page["referenceIds"],
+                *page["microVisualFeatureIds"],
+            ],
+            "application-integration": [
+                page["route"]["path"],
+                page["shell"]["shellId"],
+                *(item["componentId"] for item in page["components"]),
             ],
             "qa-and-gaps": [
                 *(item["qaId"] for item in page["acceptanceCriteria"]),
@@ -556,6 +578,16 @@ def _resolve_generated_skeleton(handoff):
                         "ratio": None,
                         "gap": 0,
                         "minSize": 0,
+                        "sizingMode": "fluid",
+                        "baseSize": 0,
+                        "maxSize": None,
+                        "trackFormula": "minmax(0, 1fr)",
+                        "growWeight": 1,
+                        "shrinkPolicy": "preserve-min",
+                        "desktopRole": "flexible-workspace",
+                        "narrowDesktopBehavior": "page-scroll",
+                        "wideViewportBehavior": "fill-available",
+                        "zoomBehavior": "effective-viewport",
                         "overflow": "visible",
                         "evidenceLevel": "approved",
                         "gapIds": [],
@@ -613,6 +645,10 @@ def _resolve_generated_skeleton(handoff):
                 "gapIds": [],
             }
         )
+        for responsive in page["responsiveVariants"]:
+            responsive.update(
+                {"status": "approved", "evidenceLevel": "approved", "gapIds": []}
+            )
     _write_json(page_inventory_path, page_inventory)
 
     registry_path = handoff / "contracts" / "component-registry.json"
@@ -630,7 +666,30 @@ def _resolve_generated_skeleton(handoff):
                     "variantId": page["variantId"],
                 }
             ],
+            "sourceReferenceIds": page["referenceIds"],
+            "renderingStrategy": "dom",
+            "assetRefs": [],
             "anatomy": ["root"],
+            "sizing": {
+                "widthMode": "fluid",
+                "minWidth": 0,
+                "baseWidth": None,
+                "maxWidth": None,
+                "minHeight": 0,
+                "baseHeight": None,
+                "maxHeight": None,
+                "trackFormula": "minmax(0, 1fr)",
+                "growWeight": 1,
+                "shrinkWeight": 1,
+                "wrapPolicy": "no-wrap",
+                "overflowOwner": "page",
+                "desktopRole": "flexible-workspace",
+                "narrowDesktopBehavior": "page-scroll",
+                "wideViewportBehavior": "fill-available",
+                "zoomBehavior": "effective-viewport",
+                "evidenceLevel": "approved",
+                "gapIds": [],
+            },
             "variants": [],
             "states": [],
             "props": [],
@@ -650,6 +709,55 @@ def _resolve_generated_skeleton(handoff):
             {"evidenceLevel": "approved", "status": "approved", "gapIds": []}
         )
     _write_json(style_path, style)
+
+    reference_path = handoff / "contracts" / "reference-inventory.json"
+    references = _read_json(reference_path)
+    for reference in references["references"]:
+        reference.update(
+            {
+                "role": "page-reference",
+                "scope": "page",
+                "authorityClass": "page-specific-design",
+                "titleEvidence": {
+                    "classification": "no-visible-title",
+                    "transcription": {"zh-CN": "", "en-US": ""},
+                    "bounds": None,
+                    "evidenceLevel": "approved",
+                    "gapIds": [],
+                },
+                "disposition": "page-candidate",
+                "status": "approved",
+                "evidenceLevel": "approved",
+                "gapIds": [],
+            }
+        )
+    _write_json(reference_path, references)
+
+    application_path = handoff / "contracts" / "application-system.json"
+    application = _read_json(application_path)
+    application.update(
+        {
+            "router": "fixture-router",
+            "defaultRoute": "/page-1",
+            "navigation": {"status": "approved"},
+            "sharedState": {"status": "approved"},
+            "status": "approved",
+            "evidenceLevel": "approved",
+            "gapIds": [],
+        }
+    )
+    for number, route_entry in enumerate(application["routeEntries"], start=1):
+        route_entry.update(
+            {
+                "path": f"/page-{number}",
+                "shellId": "app-shell",
+                "navigationEntryId": f"nav-{number}",
+                "status": "approved",
+                "evidenceLevel": "approved",
+                "gapIds": [],
+            }
+        )
+    _write_json(application_path, application)
 
     implementation_path = handoff / "contracts" / "implementation-map.json"
     implementation = _read_json(implementation_path)
@@ -727,12 +835,81 @@ def _resolve_generated_skeleton(handoff):
                 "locale": "en-US",
                 "timezone": "UTC",
                 "theme": "light",
+                "zoom": 1,
                 "fontEnvironment": ["Arial"],
                 "evidenceLevel": "approved",
                 "gapIds": [],
             }
         )
     _write_json(capture_path, capture)
+
+    calibration_path = handoff / "contracts" / "viewport-calibration.json"
+    calibration = _read_json(calibration_path)
+    for item in calibration["calibrations"]:
+        item.update({"status": "approved", "evidenceLevel": "approved", "gapIds": []})
+        for region in item["presentationRegions"]:
+            region.update(
+                {
+                    "role": "real-ui",
+                    "includeInImplementation": True,
+                    "evidenceLevel": "approved",
+                    "gapIds": [],
+                }
+            )
+    _write_json(calibration_path, calibration)
+
+    fixture_path = handoff / "contracts" / "deterministic-fixtures.json"
+    fixtures = _read_json(fixture_path)
+    for item in fixtures["fixtures"]:
+        item.update(
+            {
+                "locale": "en-US",
+                "permissionProfile": "administrator",
+                "clock": "2026-08-04T10:00:00Z",
+                "timezone": "UTC",
+                "randomSeed": 1,
+                "networkState": "settled",
+                "animationState": "completed",
+                "cursor": "hidden",
+                "status": "approved",
+                "evidenceLevel": "approved",
+                "gapIds": [],
+            }
+        )
+    _write_json(fixture_path, fixtures)
+
+    traceability_path = handoff / "contracts" / "traceability-map.json"
+    traceability = _read_json(traceability_path)
+    for item in traceability["entries"]:
+        item.update({"status": "approved", "evidenceLevel": "approved", "gapIds": []})
+    _write_json(traceability_path, traceability)
+
+    navigation_path = handoff / "contracts" / "navigation-reconciliation.json"
+    navigation = _read_json(navigation_path)
+    for number, item in enumerate(navigation["navigationSystems"], start=1):
+        item.update(
+            {
+                "shellId": "app-shell",
+                "canonicalEntries": [],
+                "discrepancies": [],
+                "freezeStatus": "approved",
+                "freezeDecision": {
+                    "zh-CN": "测试夹具已核对并冻结导航为空。",
+                    "en-US": "The validation fixture confirms and freezes an empty navigation.",
+                },
+                "evidenceLevel": "approved",
+                "gapIds": [],
+            }
+        )
+        for observation in item["observations"]:
+            observation.update(
+                {
+                    "navigationPresence": "absent",
+                    "evidenceLevel": "approved",
+                    "gapIds": [],
+                }
+            )
+    _write_json(navigation_path, navigation)
 
     diff_path = handoff / "contracts" / "diff-regions.json"
     diff = _read_json(diff_path)
@@ -2276,6 +2453,201 @@ class ValidateHandoffTests(unittest.TestCase):
 
         self.assertIn("GIT_STAGED_PATH_OUTSIDE_ALLOWLIST", self.codes(result))
         self.assertIn("outside.txt", result["checks"]["git"]["stagedPaths"])
+
+    def test_reports_dangling_reference_relationship_endpoint(self):
+        path = self.handoff / "contracts" / "reference-relationships.json"
+        document = _read_json(path)
+        document["relationships"] = [
+            {
+                "relationshipId": "RR001",
+                "fromReferenceId": "REF001",
+                "toReferenceId": "REF999",
+                "type": "complements",
+                "direction": "bidirectional",
+                "sourceBounds": None,
+                "rationale": {"zh-CN": "互补", "en-US": "Complementary"},
+                "status": "approved",
+                "evidenceLevel": "direct",
+                "gapIds": [],
+            }
+        ]
+        _write_json(path, document)
+        _refresh_design_lock(self.handoff)
+
+        result = self.validate(source_root=self.source)
+
+        self.assertIn("EVIDENCE_RELATIONSHIP_REFERENCE_MISSING", self.codes(result))
+
+    def test_reports_viewport_calibration_outside_source_canvas(self):
+        path = self.handoff / "contracts" / "viewport-calibration.json"
+        document = _read_json(path)
+        document["calibrations"][0]["uiViewportBounds"]["width"] += 1
+        _write_json(path, document)
+        _refresh_design_lock(self.handoff)
+
+        result = self.validate(source_root=self.source)
+
+        self.assertIn("CALIBRATION_BOUNDS_OUTSIDE_SOURCE", self.codes(result))
+
+    def test_reports_traceability_rule_that_does_not_resolve(self):
+        path = self.handoff / "contracts" / "traceability-map.json"
+        document = _read_json(path)
+        document["entries"][0]["sourceRuleIds"] = ["DR999"]
+        _write_json(path, document)
+        _refresh_design_lock(self.handoff)
+
+        result = self.validate(source_root=self.source)
+
+        self.assertIn("TRACEABILITY_RULE_MISSING", self.codes(result))
+
+    def test_design_language_reference_must_be_grouped_into_a_set(self):
+        path = self.handoff / "contracts" / "reference-inventory.json"
+        document = _read_json(path)
+        document["references"][0].update(
+            {
+                "role": "design-language-reference",
+                "scope": "global",
+                "authorityClass": "shared-design-language",
+            }
+        )
+        _write_json(path, document)
+        _refresh_design_lock(self.handoff)
+
+        result = self.validate(source_root=self.source)
+
+        self.assertIn("DESIGN_LANGUAGE_REFERENCE_UNGROUPED", self.codes(result))
+
+    def test_visible_design_language_title_forces_reference_classification(self):
+        path = self.handoff / "contracts" / "reference-inventory.json"
+        document = _read_json(path)
+        document["references"][0]["titleEvidence"] = {
+            "classification": "visible-title",
+            "transcription": {
+                "zh-CN": "AI SaaS UI 设计语言",
+                "en-US": "AI SaaS UI Design Language",
+            },
+            "bounds": {"x": 1, "y": 1, "width": 10, "height": 5},
+            "evidenceLevel": "direct",
+            "gapIds": [],
+        }
+        _write_json(path, document)
+        _refresh_design_lock(self.handoff)
+
+        result = self.validate(source_root=self.source)
+
+        self.assertIn("VISIBLE_DESIGN_LANGUAGE_TITLE_MISCLASSIFIED", self.codes(result))
+
+    def test_approved_page_requires_frozen_navigation(self):
+        path = self.handoff / "contracts" / "navigation-reconciliation.json"
+        document = _read_json(path)
+        document["navigationSystems"][0].update(
+            {"freezeStatus": "candidate", "evidenceLevel": "candidate"}
+        )
+        _write_json(path, document)
+        _refresh_design_lock(self.handoff)
+
+        result = self.validate(source_root=self.source)
+
+        self.assertIn("APPROVED_PAGE_NAVIGATION_NOT_FROZEN", self.codes(result))
+
+    def test_reports_unresolved_navigation_discrepancy(self):
+        path = self.handoff / "contracts" / "navigation-reconciliation.json"
+        document = _read_json(path)
+        document["navigationSystems"][0]["discrepancies"] = [
+            {
+                "navigationDiscrepancyId": "NAVD001",
+                "type": "missing-entry",
+                "referenceIds": ["REF001"],
+                "affectedNavigationEntryIds": [],
+                "resolution": {"zh-CN": "待处理", "en-US": "Pending"},
+                "winningObservationIds": [],
+                "status": "open",
+                "evidenceLevel": "candidate",
+                "gapIds": ["G001"],
+            }
+        ]
+        _write_json(path, document)
+        _refresh_design_lock(self.handoff)
+
+        result = self.validate(source_root=self.source)
+
+        self.assertIn("NAVIGATION_DISCREPANCY_UNRESOLVED", self.codes(result))
+
+    def test_approved_motion_requires_multiframe_diff_coverage(self):
+        motion_path = self.handoff / "contracts" / "motion-contract.json"
+        motion = _read_json(motion_path)
+        motion["motions"] = [
+            {
+                "motionId": "MOT001",
+                "name": {"zh-CN": "悬停", "en-US": "Hover"},
+                "targetType": "button",
+                "targetIds": ["component-P001-card"],
+                "trigger": "hover",
+                "sourceEvidence": [{"referenceId": "REF001", "bounds": None}],
+                "initialState": {"opacity": 0.8},
+                "finalState": {"opacity": 1},
+                "durationMs": 180,
+                "delayMs": 0,
+                "easing": "ease-out",
+                "animatedProperties": ["opacity"],
+                "transformOrigin": "center",
+                "layerBehavior": "preserve",
+                "pointerBehavior": "interactive",
+                "focusBehavior": "equivalent focus-visible state",
+                "reducedMotion": {"strategy": "instant", "durationMs": 0, "finalState": {"opacity": 1}},
+                "stateFrameReferenceIds": ["REF001"],
+                "status": "approved",
+                "evidenceLevel": "approved",
+                "gapIds": [],
+            }
+        ]
+        _write_json(motion_path, motion)
+        inventory_path = self.handoff / "contracts" / "page-inventory.json"
+        inventory = _read_json(inventory_path)
+        inventory["pages"][0]["motionIds"] = ["MOT001"]
+        _write_json(inventory_path, inventory)
+        _refresh_design_lock(self.handoff)
+
+        result = self.validate(source_root=self.source)
+
+        self.assertIn("MOTION_DIFF_COVERAGE_MISSING", self.codes(result))
+
+    def test_reports_dangling_semantic_visual_source_reference(self):
+        from tests.test_evidence_graph_contracts import VALID_DOCUMENTS
+
+        path = self.handoff / "contracts" / "semantic-visual-encoding.json"
+        document = copy.deepcopy(
+            VALID_DOCUMENTS["semantic-visual-encoding.schema.json"]
+        )
+        document["dimensions"][0]["values"][0]["sourceEvidence"][0][
+            "referenceId"
+        ] = "REF999"
+        _write_json(path, document)
+        _refresh_design_lock(self.handoff)
+
+        result = self.validate(source_root=self.source)
+
+        self.assertIn("SEMANTIC_VALUE_SOURCE_REFERENCE_MISSING", self.codes(result))
+
+    def test_approved_semantic_value_requires_dimension_and_diff_coverage(self):
+        from tests.test_evidence_graph_contracts import VALID_DOCUMENTS
+
+        semantic_path = self.handoff / "contracts" / "semantic-visual-encoding.json"
+        _write_json(
+            semantic_path,
+            copy.deepcopy(VALID_DOCUMENTS["semantic-visual-encoding.schema.json"]),
+        )
+        inventory_path = self.handoff / "contracts" / "page-inventory.json"
+        inventory = _read_json(inventory_path)
+        inventory["pages"][0]["semanticValueIds"] = ["SEMVAL001"]
+        _write_json(inventory_path, inventory)
+        _refresh_design_lock(self.handoff)
+
+        result = self.validate(source_root=self.source)
+
+        codes = self.codes(result)
+        self.assertIn("PAGE_SEMANTIC_VALUE_DIMENSION_MISMATCH", codes)
+        self.assertIn("SEMANTIC_DIFF_COVERAGE_MISSING", codes)
 
     def test_cli_emits_json_and_returns_nonzero_on_errors(self):
         (self.handoff / "README.md").unlink()

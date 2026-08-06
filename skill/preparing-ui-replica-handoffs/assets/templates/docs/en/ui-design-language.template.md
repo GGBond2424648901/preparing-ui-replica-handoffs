@@ -13,11 +13,15 @@ sectionId: authority-references
 
 Classify every input first in `../../contracts/reference-inventory.json`. Record `design-language-reference`, `component-board`, `brand-reference`, `interaction-state-board`, and `page-reference` separately. Never treat a design-language overview as a product page or promote a page exception into a global rule. Every shared rule states its `referenceId`, crop/coordinates, scope, conflict priority, and applicable/excluded pages.
 
+When a visible title explicitly names a UI design language, preserve its text and bounds as direct evidence. There may be several boards: group them by product/version/theme/module into one or more `DLS###` sets in `design-rule-cascade.json`, preserve every source, and record complementary, superseding, and conflicting relationships separately.
+
 sectionId: principles-and-materials
 
 ## Principles, Layers, and Materials
 
 Record design principles, information density, the 8px or other grid, background/content/overlay layers, glass/frosted/solid materials, blur, saturation, opacity, borders, shadows, glow, and stacking. Unknown values stay `unknown + gapId`; do not insert generic SaaS defaults.
+
+Governing labels such as Apple-like, frosted, premium glass, or translucent frosted are decomposed into background, blur, opacity, tint/saturation, border/highlight, shadow, texture, depth, and forbidden combinations rather than retained as adjectives only.
 
 sectionId: tokens
 
@@ -32,6 +36,16 @@ sectionId: shell-components
 ## Shell, Component, and Reuse Language
 
 Describe Sidebar, TopBar, navigation selection, workspace, cards, buttons, inputs, Tabs, tags, tables, charts, modals, drawers, Toasts, Tooltips, and AI states with anatomy, dimensions, material, states, and reuse boundaries. Include a shared-rule → shell/component → consuming-page matrix.
+
+Buttons, search, inputs, radio/checkbox, switches, selects, and navigation items include a design rule/token → component → default/hover/focus-visible/pressed/selected/disabled/loading/error → page inheritance matrix.
+
+sectionId: semantic-status-grammar
+
+## Semantic color, status, and grade grammar
+
+{{semanticVisualEncoding}}
+
+Create separate `SEM###` dimensions for priority, workflow status, evidence grade, feedback, approval, risk, sync, presence, permission, AI state, data freshness, and validation. Every `SEMVAL###` records code/label/meaning, pill or indicator form, text/background/border/dot/icon colors, geometry, typography, interaction states, source Bounds, and contrast. Never merge equal colors across dimensions automatically; values absent from evidence remain gaps.
 
 sectionId: brand-icons-assets
 
@@ -58,6 +72,8 @@ sectionId: motion-states-accessibility
 ## Motion, States, and Accessibility
 
 Record default, Hover, Focus, Pressed, Disabled, Loading, Empty, Error, permission, and AI-running states together with duration, easing, position/opacity change, and reduced-motion. Unshown states remain `proposed`, not direct evidence.
+
+Every evidenced micro-interaction enters `motion-contract.json` with trigger, initial/final states, animated properties, duration, delay, easing, layer/pointer/focus behavior, state-frame sources, and Reduced Motion. Static evidence alone does not prove motion.
 
 sectionId: forbidden-and-gaps
 

@@ -49,6 +49,24 @@ sectionId: desktop-web-first
 
 默认布局策略为 `desktop-web` + `desktop-hybrid-elastic`：固定/粘性 Shell → 流式或有界流式主工作区 → 组件最小/基准/最大尺寸 → 按功能归属的整页/模块/混合滚动 → 获批重排。普通纵向内容优先整页滚动；表格、代码、流程图、画布和日志可使用专用滚动面。窄桌面窗口或浏览器放大不得自动转换为移动端单列；移动端必须使用独立 `variantId`。
 
+sectionId: evidence-graph-and-navigation
+
+## 证据图谱与导航冻结
+
+逐页实施前依次完成参考图关系、UI 视口校准、多设计语言图集合/规则级联、不一致处理、稳定数据、追溯映射和导航对齐。导航先汇总所有设计图中的标题、图标、顺序、层级、路由和权限，解决漏项、多项与差异并冻结唯一规范树；未冻结导航不得开始批准页面。
+
+sectionId: material-controls-and-motion
+
+## 主体材质、控件继承与动效
+
+将“苹果风格、磨砂质感、高级玻璃、透明磨砂”等主体语言拆成材质 Token 和规则，并让按钮、搜索、输入、单选/多选、开关、下拉、导航、卡片、表格操作和浮层的全部状态继承。Hover/Focus/Pressed/Selected/展开/进入等使用 `MOT###`，记录起止视觉、时间参数、动画属性、焦点等价状态和 Reduced Motion；静态图无法证明的动效保持待确认。
+
+sectionId: semantic-visual-implementation
+
+## 语义状态实施与验收
+
+从 `semantic-visual-encoding.json` 生成按维度隔离的语义 Token/变体，不按颜色名称合并。表格状态列、筛选器、详情标签、统计卡、导航徽标和弹窗统一引用 `SEMVAL###`。实现必须保留原图的文字/底色/边框/圆点/图标颜色和胶囊几何，并为每个页面实际值登记 `semanticTargets` 的颜色、几何与对比度验收。
+
 sectionId: qa-and-git-safety
 
 ## QA 与 Git 安全

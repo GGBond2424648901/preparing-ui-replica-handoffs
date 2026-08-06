@@ -30,7 +30,7 @@ class PluginPackageTests(unittest.TestCase):
         )
 
         self.assertEqual(manifest["name"], "preparing-ui-replica-handoffs")
-        self.assertRegex(manifest["version"], r"^\d+\.\d+\.\d+$")
+        self.assertRegex(manifest["version"], r"^\d+\.\d+\.\d+(?:\+codex\.\d+)?$")
         self.assertEqual(manifest["skills"], "./skills/")
         self.assertIn("中文", manifest["description"])
         self.assertIn("English", manifest["description"])

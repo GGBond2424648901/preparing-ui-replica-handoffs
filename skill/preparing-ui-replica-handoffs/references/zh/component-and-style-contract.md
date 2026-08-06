@@ -139,3 +139,43 @@ ruleId: CS-022
 ruleId: CS-023
 
 每个微视觉特征必须绑定页面、区域、来源 `referenceId`、Bounds、渲染策略、响应式行为和几何/颜色/透明度容差，并加入 `diff-regions.json` 的特征级 reference/current/overlay/diff 验收目标。
+
+sectionId: named-visual-language
+
+## 主体视觉语言的机器化拆解
+
+ruleId: CS-024
+
+若设计语言图写明“苹果风格”“磨砂质感”“高级玻璃”“透明磨砂”“玻璃拟态”或其他主体描述，不得只抄形容词。逐条拆为背景与承载层、backdrop blur、前景 blur、透明度、色调/饱和度、内外高光、半透明边框、环境阴影、噪点/纹理、层级、与背景的对比条件和禁止组合；每条 `DR###` 保留来源坐标，并映射到 materials/backgrounds/blur/opacity/borders/shadows/layers Token。
+
+ruleId: CS-025
+
+主体视觉语言必须向所有控件继承。按钮、图标按钮、搜索、输入框、文本域、单选、多选、开关、下拉、多选标签、Tab、分页、表格操作、导航项、卡片、弹窗、抽屉和 Tooltip 的默认、hover、focus-visible、pressed、selected、disabled、loading、error 状态，都要列出 `styleTokenRefs`、`sourceRuleIds`、局部覆盖和视觉验收目标。禁止出现背景采用高级玻璃，而按钮或搜索仍为无关默认组件库风格的割裂实现。
+
+sectionId: motion-contract
+
+## 动效与微交互合同
+
+ruleId: CS-026
+
+每个有证据的 Hover、Focus、Pressed、Selected、展开/收起、进入/退出、加载、滚动、拖拽或状态切换使用 `MOT###`：记录目标、触发、起止视觉、动画属性、时长、延迟、缓动、transform-origin、层级、指针、焦点、状态帧来源和 Reduced Motion 降级。仅有静态图且没有文字、状态板或多帧证据时，不得把常见动效标为直接事实，只能标 `candidate`/`unknown` 并登记缺口。
+
+ruleId: CS-027
+
+微交互动效必须服务主体材质语言：玻璃高光、边框亮度、阴影深度、微位移、透明度或背景模糊的变化使用同一 Token 和规则级联。禁止无证据的大幅弹跳/缩放、布局抖动、改变组件尺寸导致邻接内容跳动，以及只支持鼠标而没有等价 focus-visible 状态。
+
+sectionId: semantic-visual-encoding
+
+## 语义颜色、状态与等级编码
+
+ruleId: CS-028
+
+将优先级、流程状态、证据等级、反馈、审批、风险、同步/网络、在线状态、权限、AI 运行态、数据新鲜度和校验结果拆成独立 `SEM###` 维度。每个可见值使用 `SEMVAL###` 记录编码、双语标签、业务含义、胶囊/圆点胶囊/圆点标签/徽标形状，以及文字、底色、边框、圆点和图标五类颜色。P0/P1/P2、待验收/草稿/进行中/阻塞/待审核、A/B/C/未评级等必须按原图分别测量，不能只写“红/黄/蓝状态”。
+
+ruleId: CS-029
+
+逐值测量高度、最小宽度、水平/垂直内边距、文字与圆点间距、圆角、边框宽度、圆点直径、图标尺寸、字体、字重和行高，并登记默认、hover、focus-visible、pressed、selected、disabled、loading。主体材质可影响承载层，但语义识别和对比度优先；设计稿使用浅色实底胶囊时，不得为追求玻璃感擅自改成透明玻璃。
+
+ruleId: CS-030
+
+颜色相同不代表语义相同：优先级 P0 的红色、错误反馈红色和阻塞状态红色保持独立 Token 与含义，除非权威设计语言图明确要求统一。不同维度禁止互相推断顺序或状态；未展示的 P3、成功、离线、AI 失败等只能作为检查清单，不能生成正式值。每个页面通过 `semanticDimensionIds`/`semanticValueIds` 声明实际使用项，并在 `semanticTargets` 中做颜色、几何和对比度 Diff。

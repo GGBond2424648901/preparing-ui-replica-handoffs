@@ -54,6 +54,16 @@
         "variantId",
         "sourceAssetIds",
         "referenceIds",
+        "referenceRelationshipIds",
+        "calibrationIds",
+        "inheritedDesignRuleIds",
+        "inconsistencyIds",
+        "fixtureIds",
+        "traceabilityIds",
+        "navigationSystemIds",
+        "motionIds",
+        "semanticDimensionIds",
+        "semanticValueIds",
         "microVisualFeatureIds",
         "route",
         "canvas",
@@ -85,6 +95,60 @@
           "type": "array",
           "items": { "type": "string", "pattern": "^REF[0-9]{3,}$" },
           "minItems": 1,
+          "uniqueItems": true
+        },
+        "referenceRelationshipIds": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^RR[0-9]{3,}$" },
+          "uniqueItems": true
+        },
+        "calibrationIds": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^CAL[0-9]{3,}$" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "inheritedDesignRuleIds": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^DR[0-9]{3,}$" },
+          "uniqueItems": true
+        },
+        "inconsistencyIds": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^INC[0-9]{3,}$" },
+          "uniqueItems": true
+        },
+        "fixtureIds": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^FIX[0-9]{3,}$" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "traceabilityIds": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^TR[0-9]{3,}$" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "navigationSystemIds": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^NAV[0-9]{3,}$" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "motionIds": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^MOT[0-9]{3,}$" },
+          "uniqueItems": true
+        },
+        "semanticDimensionIds": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^SEM[0-9]{3,}$" },
+          "uniqueItems": true
+        },
+        "semanticValueIds": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^SEMVAL[0-9]{3,}$" },
           "uniqueItems": true
         },
         "microVisualFeatureIds": {

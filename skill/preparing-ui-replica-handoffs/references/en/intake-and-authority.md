@@ -91,3 +91,35 @@ The first visual pass only classifies role: page reference, UI design-language r
 ruleId: IA-015
 
 A UI design-language image may become cross-page visual authority only with per-rule scope. A global principle cannot override more specific page-direct evidence, and a page exception cannot contaminate global tokens. Record inheritance, override, exception, and conflict separately.
+
+sectionId: design-language-sets
+
+## Multiple design-language boards and title evidence
+
+ruleId: IA-016
+
+When a visible title explicitly says “UI Design Language,” “Design Language,” “Design System,” “Visual Specification,” or an equivalent product-specific name, record the title and bounds as direct role evidence and remove that board from page candidates. Read the image with the multimodal model; external OCR is not required, and filenames remain clues that cannot override the visible title.
+
+ruleId: IA-017
+
+There may be several design-language boards. Group them into one or more `DLS###` sets by product, version, theme, module, and scope before creating `DR###` rules. Identical rules retain every source region; complementary rules merge; theme/module variants coexist; supersession requires explicit version evidence; conflicts become `DRC###` and block affected-page approval until resolved.
+
+sectionId: evidence-graph
+
+## Evidence graph and canvas calibration
+
+ruleId: IA-018
+
+Use `reference-relationships.json` for continuation, detail, state, variant, responsive, overlay, component, brand, duplicate, complementary, superseding, and conflicting relationships. Use `viewport-calibration.json` to separate source canvas, real UI viewport, crop offset, scale/DPR, full content extent, fixed/sticky regions, and presentation matter such as annotations, redlines, measurements, explanatory copy, watermarks, browser chrome, and device frames; presentation matter is excluded from implementation by default.
+
+ruleId: IA-019
+
+Use `design-inconsistencies.json` for malformed icons, impossible perspective, geometry drift, copy conflicts, asset conflicts, and interaction conflicts in generated or cross-board designs. Each entry chooses page-specific preservation, canonicalization, redraw, inferred copy, or unresolved treatment, with winning evidence and acceptance impact.
+
+sectionId: navigation-authority
+
+## Navigation authority and freeze
+
+ruleId: IA-020
+
+Before page implementation, observe every navigation label, icon, order, parent hierarchy, route, selected state, and role/permission visibility across references. Record omissions, extras, label/icon/order/parent/route/visibility differences in `navigation-reconciliation.json`; an approved canonical navigation tree with `freezeStatus: approved` is required before page approval.

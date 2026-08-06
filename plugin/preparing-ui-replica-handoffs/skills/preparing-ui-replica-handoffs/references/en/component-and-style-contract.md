@@ -139,3 +139,43 @@ For every page, contract visible icon size/stroke, Logo proportion/clear space, 
 ruleId: CS-023
 
 Bind each micro feature to page, region, source `referenceId`, bounds, rendering strategy, responsive behavior, and geometry/color/opacity tolerances, then add a feature-level reference/current/overlay/diff target to `diff-regions.json`.
+
+sectionId: named-visual-language
+
+## Machine-contract decomposition of the governing visual language
+
+ruleId: CS-024
+
+When a design-language board names “Apple-like,” “frosted,” “premium glass,” “translucent frosted,” “glassmorphism,” or another governing style, do not preserve only the adjective. Decompose it into background/carrier layers, backdrop blur, foreground blur, opacity, tint/saturation, inner/outer highlights, translucent border, ambient shadow, noise/texture, depth, background-contrast conditions, and forbidden combinations. Every `DR###` keeps source bounds and maps to materials/backgrounds/blur/opacity/borders/shadows/layers tokens.
+
+ruleId: CS-025
+
+The governing visual language must cascade into every control. Buttons, icon buttons, search, inputs, text areas, radio, checkbox, switches, selects, multi-select chips, tabs, pagination, table actions, navigation items, cards, dialogs, drawers, and tooltips list `styleTokenRefs`, `sourceRuleIds`, local overrides, and visual acceptance targets for default, hover, focus-visible, pressed, selected, disabled, loading, and error states. A premium-glass background combined with unrelated default-library buttons or search fields is a failed implementation.
+
+sectionId: motion-contract
+
+## Motion and micro-interaction contract
+
+ruleId: CS-026
+
+Create a `MOT###` for every evidenced hover, focus, press, selection, expand/collapse, enter/exit, load, scroll, drag, or state transition. Record target, trigger, initial/final visuals, animated properties, duration, delay, easing, transform origin, layer, pointer, focus, state-frame sources, and Reduced Motion fallback. A static image without written, state-board, or multi-frame evidence cannot prove a conventional animation; keep it `candidate`/`unknown` with a gap.
+
+ruleId: CS-027
+
+Micro-interactions inherit the governing material language: glass highlight, border luminance, shadow depth, micro-translation, opacity, and background-blur changes use the same token/rule cascade. Forbid unevidenced large bounce/scale, layout jitter, size changes that move adjacent content, and mouse-only behavior without an equivalent focus-visible state.
+
+sectionId: semantic-visual-encoding
+
+## Semantic color, status, and grade encoding
+
+ruleId: CS-028
+
+Model priority, workflow status, evidence grade, feedback, approval, risk, sync/network, presence, permission, AI runtime state, data freshness, and validation as separate `SEM###` dimensions. Each visible `SEMVAL###` records code, bilingual label, business meaning, pill/dot-pill/dot-label/badge shape, and separate text, background, border, indicator-dot, and icon colors. P0/P1/P2, pending acceptance/draft/in progress/blocked/pending review, and A/B/C/unrated must be measured independently from the source instead of summarized as generic red/orange/blue states.
+
+ruleId: CS-029
+
+Measure height, minimum width, horizontal/vertical padding, label-to-indicator gap, radius, border width, dot diameter, icon size, font, weight, and line height for every value, plus default, hover, focus-visible, pressed, selected, disabled, and loading states. Governing materials may affect the carrier surface, but semantic recognition and contrast take precedence; do not turn an evidenced opaque tinted pill into glass merely to match a named material style.
+
+ruleId: CS-030
+
+Equal colors do not imply equal semantics: priority P0 red, error-feedback red, and blocked-state red keep separate tokens and meanings unless an authoritative board explicitly unifies them. Never infer values or ordering across dimensions; unseen P3, success, offline, or AI-failed values remain checklist items rather than formal facts. Pages declare actual usage through `semanticDimensionIds` and `semanticValueIds`, with color, geometry, and contrast acceptance in `semanticTargets`.

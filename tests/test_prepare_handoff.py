@@ -847,6 +847,15 @@ class PrepareHandoffTests(unittest.TestCase):
             "implementation-plan.schema.json": "implementation-plan.json",
             "capture-profile.schema.json": "capture-profile.json",
             "diff-regions.schema.json": "diff-regions.json",
+            "reference-relationships.schema.json": "reference-relationships.json",
+            "viewport-calibration.schema.json": "viewport-calibration.json",
+            "design-rule-cascade.schema.json": "design-rule-cascade.json",
+            "design-inconsistencies.schema.json": "design-inconsistencies.json",
+            "deterministic-fixtures.schema.json": "deterministic-fixtures.json",
+            "traceability-map.schema.json": "traceability-map.json",
+            "navigation-reconciliation.schema.json": "navigation-reconciliation.json",
+            "motion-contract.schema.json": "motion-contract.json",
+            "semantic-visual-encoding.schema.json": "semantic-visual-encoding.json",
             "design-lock.schema.json": "design-lock.json",
         }
         for schema_name, contract_name in schema_contracts.items():
@@ -890,6 +899,15 @@ class PrepareHandoffTests(unittest.TestCase):
             "contracts/implementation-plan.json",
             "contracts/capture-profile.json",
             "contracts/diff-regions.json",
+            "contracts/reference-relationships.json",
+            "contracts/viewport-calibration.json",
+            "contracts/design-rule-cascade.json",
+            "contracts/design-inconsistencies.json",
+            "contracts/deterministic-fixtures.json",
+            "contracts/traceability-map.json",
+            "contracts/navigation-reconciliation.json",
+            "contracts/motion-contract.json",
+            "contracts/semantic-visual-encoding.json",
             "contracts/visual-qa-matrix.csv",
             "contracts/design-lock.json",
             "reports/validation-report.json",
@@ -945,6 +963,91 @@ class PrepareHandoffTests(unittest.TestCase):
                 "Component-Specification.md",
                 "pages",
             },
+        )
+
+    def test_generates_evidence_graph_contracts(self):
+        self.make_three_image_source()
+        output = self.root / "evidence-graph-output"
+
+        PREPARE_HANDOFF.prepare_handoff(
+            self.source, output, design_version="v1"
+        )
+
+        contract_names = {
+            "reference-relationships.json",
+            "viewport-calibration.json",
+            "design-rule-cascade.json",
+            "design-inconsistencies.json",
+            "deterministic-fixtures.json",
+            "traceability-map.json",
+            "navigation-reconciliation.json",
+            "motion-contract.json",
+            "semantic-visual-encoding.json",
+        }
+        self.assertSetEqual(
+            {path.name for path in (output / "contracts").glob("*.json")}
+            & contract_names,
+            contract_names,
+        )
+
+        relationships = json.loads(
+            (output / "contracts" / "reference-relationships.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        calibrations = json.loads(
+            (output / "contracts" / "viewport-calibration.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        cascade = json.loads(
+            (output / "contracts" / "design-rule-cascade.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        fixtures = json.loads(
+            (output / "contracts" / "deterministic-fixtures.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        traceability = json.loads(
+            (output / "contracts" / "traceability-map.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        navigation = json.loads(
+            (output / "contracts" / "navigation-reconciliation.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        motion = json.loads(
+            (output / "contracts" / "motion-contract.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        semantics = json.loads(
+            (output / "contracts" / "semantic-visual-encoding.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        self.assertEqual(relationships["relationships"], [])
+        self.assertEqual(len(calibrations["calibrations"]), 3)
+        self.assertEqual(cascade["designLanguageSets"], [])
+        self.assertEqual(cascade["rules"], [])
+        self.assertEqual(cascade["conflicts"], [])
+        self.assertEqual(len(fixtures["fixtures"]), 3)
+        self.assertEqual(len(traceability["entries"]), 3)
+        self.assertEqual(len(navigation["navigationSystems"]), 3)
+        self.assertEqual(motion["motions"], [])
+        self.assertEqual(semantics["dimensions"], [])
+        self.assertTrue(
+            all(item["gapIds"] for item in calibrations["calibrations"])
+        )
+        self.assertTrue(all(item["gapIds"] for item in fixtures["fixtures"]))
+        self.assertTrue(all(item["gapIds"] for item in traceability["entries"]))
+        self.assertTrue(
+            all(item["gapIds"] for item in navigation["navigationSystems"])
         )
 
     def test_dry_run_returns_the_plan_without_writing_any_output(self):

@@ -147,3 +147,31 @@ ruleId: DP-024
 ruleId: DP-025
 
 `implementation-plan.json` 按“全局设计语言/Token/Shell/共享组件 → 页面逐页实现 → 系统集成”的顺序组织。每页只有通过合同完整性、结构、视觉、交互和集成导航门禁后才能验收，微视觉特征必须进入该页验收。
+
+sectionId: evidence-graph-contracts
+
+## 证据图谱机器合同
+
+ruleId: DP-026
+
+交付包必须包含 `reference-relationships.json`、`viewport-calibration.json`、`design-rule-cascade.json`、`design-inconsistencies.json`、`deterministic-fixtures.json`、`traceability-map.json`、`navigation-reconciliation.json` 和 `motion-contract.json`。这些文件与页面、参考图、规则、组件、实现目标和 QA ID 互相解析，禁止孤立记录或悬空 ID。
+
+ruleId: DP-027
+
+`design-rule-cascade.json` 支持多个 `DLS###` 设计语言集合及每集合多张参考图。每个 `DR###` 必须至少有一段来源坐标；同一规则可保留多来源。冲突、版本覆盖、主题/模块作用域和页面例外必须机器可读，不能只散落在说明文字中。
+
+ruleId: DP-028
+
+`navigation-reconciliation.json` 在逐页实施前汇总全部导航观察并冻结唯一规范树。遗漏、多余、标题、图标、顺序、层级、路由和权限差异必须逐项解决；未达到 `freezeStatus: approved` 时，相关页面不得批准。
+
+ruleId: DP-029
+
+`motion-contract.json` 保存交互状态和动效的证据、起止帧、时间参数、层级/焦点行为与 Reduced Motion；`deterministic-fixtures.json` 固定角色权限、数据、时钟、时区、随机种子、网络、动画、光标和滚动位置，确保 Reference/Current/Overlay/Diff 可重复。
+
+ruleId: DP-030
+
+`traceability-map.json` 必须形成“参考图区域 → 设计规则/Token → 组件/微视觉/动效 → 页面身份 → 实现文件/符号 → QA”的闭环。批准页面引用的校准、导航、稳定数据、追溯和动效合同必须同样获批。
+
+ruleId: DP-031
+
+`semantic-visual-encoding.json` 按 `SEM###` 维度和 `SEMVAL###` 值保存状态/等级语法。每个值必须有来源参考图和 Bounds，并完整记录颜色角色、形状、几何、字体、交互状态、对比度、证据等级与缺口。逐页合同和 Diff 目标必须可解析到这些 ID。

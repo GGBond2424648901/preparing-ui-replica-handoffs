@@ -139,3 +139,27 @@ Compare every `MV###` in reference/current/overlay/diff modes at the native base
 ruleId: QG-026
 
 Page acceptance also proves that the route/navigation reaches it in the unified application on the shared port, that it reuses the correct shell/tokens/components, and that it does not regress accepted pages. A passing isolated screenshot with failing integrated navigation cannot mark the page accepted.
+
+sectionId: evidence-graph-acceptance
+
+## Evidence-graph, navigation, and motion acceptance
+
+ruleId: QG-027
+
+Reference and Current use the same calibrated UI viewport and deterministic fixture. Dynamic dates, random values, avatars, network state, animation progress, cursor, and scroll position must be fixed rather than hidden by loose thresholds or broad masks.
+
+ruleId: QG-028
+
+Navigation acceptance verifies the canonical tree first, then each page's selected, expanded, and permission state. Any label, icon, order, hierarchy, route, or visibility deviation from the frozen contract fails. A board that accidentally omits or adds an entry cannot bypass navigation reconciliation.
+
+ruleId: QG-029
+
+Motion acceptance replays every `MOT###`, captures start, required intermediate, and finish states, and checks duration, delay, easing, animated properties, stacking/hit area, equivalent focus state, and Reduced Motion. A matching final screenshot alone cannot prove motion acceptance.
+
+ruleId: QG-030
+
+Diff the governing visual language by region: background/material layer, glass blur/translucency, border/highlight, shadow/depth, and control states for buttons, search, multi-select, navigation, and others. Anti-aliasing or font-rendering tolerance addresses environment noise only; it cannot hide geometry, material, or state drift.
+
+ruleId: QG-031
+
+Accept semantic visuals per `SEMVAL###`: compare text, background, border, indicator/icon colors; pill height/width/padding/radius/border/dot dimensions; typography; and contrast separately. Also verify business meaning, ordering, and accessible name. A color match with the wrong state meaning still fails.

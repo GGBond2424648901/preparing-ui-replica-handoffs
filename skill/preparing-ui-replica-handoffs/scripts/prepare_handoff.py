@@ -70,6 +70,15 @@ SCHEMA_CONTRACTS = {
     "contracts/implementation-plan.json": "implementation-plan.schema.json",
     "contracts/capture-profile.json": "capture-profile.schema.json",
     "contracts/diff-regions.json": "diff-regions.schema.json",
+    "contracts/reference-relationships.json": "reference-relationships.schema.json",
+    "contracts/viewport-calibration.json": "viewport-calibration.schema.json",
+    "contracts/design-rule-cascade.json": "design-rule-cascade.schema.json",
+    "contracts/design-inconsistencies.json": "design-inconsistencies.schema.json",
+    "contracts/deterministic-fixtures.json": "deterministic-fixtures.schema.json",
+    "contracts/traceability-map.json": "traceability-map.schema.json",
+    "contracts/navigation-reconciliation.json": "navigation-reconciliation.schema.json",
+    "contracts/motion-contract.json": "motion-contract.schema.json",
+    "contracts/semantic-visual-encoding.json": "semantic-visual-encoding.schema.json",
     "contracts/design-lock.json": "design-lock.schema.json",
 }
 
@@ -563,6 +572,16 @@ def _build_page_inventory(assets: list[dict]) -> dict:
                 **identity,
                 "sourceAssetIds": [asset["assetId"]],
                 "referenceIds": [_numbered("REF", number)],
+                "referenceRelationshipIds": [],
+                "calibrationIds": [_numbered("CAL", number)],
+                "inheritedDesignRuleIds": [],
+                "inconsistencyIds": [],
+                "fixtureIds": [_numbered("FIX", number)],
+                "traceabilityIds": [_numbered("TR", number)],
+                "navigationSystemIds": [_numbered("NAV", number)],
+                "motionIds": [],
+                "semanticDimensionIds": [],
+                "semanticValueIds": [],
                 "microVisualFeatureIds": [],
                 "route": {
                     "path": None,
@@ -764,11 +783,25 @@ def _build_diff_regions(assets: list[dict]) -> dict:
                             "diff",
                         ],
                         "evidenceTypes": ["visual", "structural", "interaction"],
+                        "comparisonType": "mixed",
+                        "dynamicMaskIds": [],
+                        "antiAliasing": {
+                            "allowEnvironmentNoise": False,
+                            "rationale": None,
+                        },
+                        "textTolerance": {
+                            "maxShiftPx": 0,
+                            "fontRasterizationOnly": False,
+                        },
+                        "geometryTolerancePx": 0,
+                        "materialChecks": [],
                         "tolerance": {"pixelRatio": 0},
                         "status": "not-run",
                     }
                 ],
                 "microVisualTargets": [],
+                "motionTargets": [],
+                "semanticTargets": [],
             }
         )
     return {"schemaVersion": SCHEMA_VERSION, "pages": pages}
@@ -789,6 +822,18 @@ def _build_reference_inventory(assets: list[dict]) -> dict:
                     "zh-CN": "待人工识别的参考图",
                     "en-US": "Reference awaiting visual classification",
                 },
+                "titleEvidence": {
+                    "classification": "unknown",
+                    "transcription": {"zh-CN": "", "en-US": ""},
+                    "bounds": None,
+                    "evidenceLevel": "unknown",
+                    "gapIds": [gap_id],
+                },
+                "designLanguageSetIds": [],
+                "version": None,
+                "theme": None,
+                "module": None,
+                "disposition": "unknown",
                 "appliesToPageIdentities": [_identity(number)],
                 "shellIds": [],
                 "componentIds": [],
@@ -800,6 +845,179 @@ def _build_reference_inventory(assets: list[dict]) -> dict:
             }
         )
     return {"schemaVersion": SCHEMA_VERSION, "references": references}
+
+
+def _build_reference_relationships() -> dict:
+    return {"schemaVersion": SCHEMA_VERSION, "relationships": []}
+
+
+def _build_viewport_calibrations(assets: list[dict]) -> dict:
+    calibrations = []
+    for number, asset in enumerate(assets, start=1):
+        gap_id = _numbered("G", number)
+        calibrations.append(
+            {
+                "calibrationId": _numbered("CAL", number),
+                "referenceId": _numbered("REF", number),
+                "sourceCanvas": {
+                    "width": asset["width"],
+                    "height": asset["height"],
+                },
+                "uiViewportBounds": {
+                    "x": 0,
+                    "y": 0,
+                    "width": asset["width"],
+                    "height": asset["height"],
+                },
+                "cropOffset": {"x": 0, "y": 0},
+                "sourceScale": 1,
+                "effectiveDpr": 1,
+                "fullContentExtent": {
+                    "width": asset["width"],
+                    "height": asset["height"],
+                },
+                "presentationRegions": [
+                    {
+                        "presentationRegionId": _numbered("PR", number),
+                        "role": "unknown",
+                        "bounds": {
+                            "x": 0,
+                            "y": 0,
+                            "width": asset["width"],
+                            "height": asset["height"],
+                        },
+                        "includeInImplementation": False,
+                        "evidenceLevel": "unknown",
+                        "gapIds": [gap_id],
+                    }
+                ],
+                "fixedRegionIds": [],
+                "stickyRegionIds": [],
+                "status": "proposed",
+                "evidenceLevel": "unknown",
+                "gapIds": [gap_id],
+            }
+        )
+    return {"schemaVersion": SCHEMA_VERSION, "calibrations": calibrations}
+
+
+def _build_design_rule_cascade() -> dict:
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "designLanguageSets": [],
+        "rules": [],
+        "conflicts": [],
+    }
+
+
+def _build_design_inconsistencies() -> dict:
+    return {"schemaVersion": SCHEMA_VERSION, "inconsistencies": []}
+
+
+def _build_deterministic_fixtures(assets: list[dict]) -> dict:
+    fixtures = []
+    for number, asset in enumerate(assets, start=1):
+        gap_id = _numbered("G", number)
+        fixtures.append(
+            {
+                "fixtureId": _numbered("FIX", number),
+                **_identity(number),
+                "locale": "unclassified",
+                "permissionProfile": "unclassified",
+                "clock": "unclassified",
+                "timezone": "unclassified",
+                "randomSeed": None,
+                "dataFixturePath": None,
+                "assetIds": [asset["assetId"]],
+                "networkState": "unknown",
+                "animationState": "unknown",
+                "cursor": "unknown",
+                "scrollPositions": [{"ownerId": "page", "x": 0, "y": 0}],
+                "dynamicMaskIds": [],
+                "status": "proposed",
+                "evidenceLevel": "unknown",
+                "gapIds": [gap_id],
+            }
+        )
+    return {"schemaVersion": SCHEMA_VERSION, "fixtures": fixtures}
+
+
+def _build_traceability_map(assets: list[dict]) -> dict:
+    entries = []
+    for number, asset in enumerate(assets, start=1):
+        gap_id = _numbered("G", number)
+        reference_id = _numbered("REF", number)
+        entries.append(
+            {
+                "traceabilityId": _numbered("TR", number),
+                "sourceReferenceIds": [reference_id],
+                "sourceRuleIds": [],
+                "sourceBounds": [
+                    {
+                        "referenceId": reference_id,
+                        "bounds": {
+                            "x": 0,
+                            "y": 0,
+                            "width": asset["width"],
+                            "height": asset["height"],
+                        },
+                    }
+                ],
+                "tokenIds": [],
+                "componentIds": [],
+                "microVisualFeatureIds": [],
+                "pageIdentities": [_identity(number)],
+                "implementationTargets": [],
+                "qaIds": [entry["qaId"] for entry in _qa_entries(number)],
+                "status": "proposed",
+                "evidenceLevel": "unknown",
+                "gapIds": [gap_id],
+            }
+        )
+    return {"schemaVersion": SCHEMA_VERSION, "entries": entries}
+
+
+def _build_navigation_reconciliation(assets: list[dict]) -> dict:
+    systems = []
+    for number, _asset in enumerate(assets, start=1):
+        gap_id = _numbered("G", number)
+        reference_id = _numbered("REF", number)
+        systems.append(
+            {
+                "navigationSystemId": _numbered("NAV", number),
+                "shellId": "unclassified",
+                "sourceReferenceIds": [reference_id],
+                "observations": [
+                    {
+                        "observationId": _numbered("NOBS", number),
+                        "referenceId": reference_id,
+                        "pageIdentity": _identity(number),
+                        "navigationPresence": "unknown",
+                        "entries": [],
+                        "evidenceLevel": "unknown",
+                        "gapIds": [gap_id],
+                    }
+                ],
+                "canonicalEntries": [],
+                "discrepancies": [],
+                "freezeStatus": "proposed",
+                "freezeDecision": {
+                    "zh-CN": "待跨设计图核对导航项、标题、图标、顺序、路由和权限后冻结。",
+                    "en-US": "Freeze after reconciling navigation entries, labels, icons, order, routes, and permissions across references.",
+                },
+                "evidenceLevel": "unknown",
+                "gapIds": [gap_id],
+            }
+        )
+    return {"schemaVersion": SCHEMA_VERSION, "navigationSystems": systems}
+
+
+def _build_motion_contract() -> dict:
+    return {"schemaVersion": SCHEMA_VERSION, "motions": []}
+
+
+def _build_semantic_visual_encoding() -> dict:
+    return {"schemaVersion": SCHEMA_VERSION, "dimensions": []}
 
 
 def _build_application_system(assets: list[dict], global_gap_id: str) -> dict:
@@ -987,12 +1205,13 @@ def _page_doc_values(number: int, asset: dict, locale: str) -> dict[str, str]:
         micro_text = (
             f"尚未自动测量微视觉特征。人工检查 `{_numbered('REF', number)}` 后，必须登记图标/Logo、"
             "边框、圆角、阴影、透明度、曲线控制点、圆环、圆柱、渐变、裁切与层级，并建立特征级 Diff；"
-            f"当前关联缺口 `{gap_id}`。"
+            f"当前关联缺口 `{gap_id}`。设计语言继承与动效 `MOT###` 尚未分类，不能从静态图擅自补写。"
         )
         integration_text = (
             "本页必须作为统一 Router 下的一个路由，在同一应用、同一开发服务器和共享端口中实现；"
             "复用已冻结的设计语言、Shell 与组件，不得创建独立页面服务器。路由、导航入口和 Shell "
-            f"尚未确认（`{gap_id}`）。"
+            f"尚未确认（`{gap_id}`）。证据图谱：`CAL{number:03d}`、`FIX{number:03d}`、`TR{number:03d}`、"
+            f"`NAV{number:03d}`；必须先核对跨图导航标题、图标、顺序、路由和权限并冻结。"
         )
     else:
         identity_text = (
@@ -1025,12 +1244,15 @@ def _page_doc_values(number: int, asset: dict, locale: str) -> dict[str, str]:
         micro_text = (
             f"Micro features are not auto-measured. After inspecting `{_numbered('REF', number)}`, "
             "contract icons/Logo, borders, radii, shadows, opacity, curve control points, rings, cylinders, "
-            f"gradients, clipping, and layering with feature-level Diff targets; gap `{gap_id}` remains."
+            f"gradients, clipping, and layering with feature-level Diff targets; gap `{gap_id}` remains. "
+            "Design-language inheritance and `MOT###` motion remain unclassified and must not be invented from a static board."
         )
         integration_text = (
             "Implement this page as one route under the unified Router in the same application, development "
             "server, and shared port. Reuse the frozen design language, shell, and components; do not create "
-            f"a standalone page server. Route, navigation entry, and shell remain unresolved (`{gap_id}`)."
+            f"a standalone page server. Route, navigation entry, and shell remain unresolved (`{gap_id}`). "
+            f"Evidence graph: `CAL{number:03d}`, `FIX{number:03d}`, `TR{number:03d}`, `NAV{number:03d}`. "
+            "Reconcile cross-board navigation labels, icons, order, routes, and permissions before freeze."
         )
     qa_text += f"\nQA IDs: {qa_ids}"
     return {
@@ -1091,6 +1313,7 @@ def _build_markdown_documents(
             registry = "尚未根据人工证据分类组件；注册表保持为空。"
             styles = "样式令牌未知，并已关联全局缺口。"
             states = "不得从单张默认图推断未展示的状态或变体。"
+            semantics = "语义视觉编码初始为空；必须从优先级、状态、等级等权威图示中逐值测量，禁止按相同颜色合并含义。"
         else:
             authority = (
                 "Design images are direct visual evidence; product materials outrank "
@@ -1103,12 +1326,14 @@ def _build_markdown_documents(
             registry = "No components are classified without human-supported evidence."
             styles = "Style tokens are unknown and linked to the global gap."
             states = "Unshown states and variants are not inferred from a default image."
+            semantics = "Semantic visual encoding starts empty; measure each priority, status, grade, and other value from authoritative evidence and never merge meanings by hue."
         documents[f"{docs_root}/{details['guide']}"] = _render_template(
             f"{template_root}/ui-implementation-guide.template.md",
             {
                 "authorityOrder": authority,
                 "implementationMapPath": "../../contracts/implementation-map.json",
                 "qaAndGitSafety": qa_git,
+                "semanticVisualEncoding": semantics,
             },
         )
         documents[f"{docs_root}/{details['components']}"] = _render_template(
@@ -1117,6 +1342,7 @@ def _build_markdown_documents(
                 "componentRegistry": registry,
                 "styleTokens": styles,
                 "componentStatesAndVariants": states,
+                "semanticVisualEncoding": semantics,
             },
         )
         if locale == "zh-CN":
@@ -1140,6 +1366,7 @@ def _build_markdown_documents(
                 "referenceAuthority": reference_authority,
                 "styleContract": style_contract,
                 "microVisualContract": micro_contract,
+                "semanticVisualEncoding": semantics,
             },
         )
         for number, asset in enumerate(assets, start=1):
@@ -1330,6 +1557,31 @@ def _build_generated_files(
             _build_capture_profiles(assets)
         ),
         "contracts/diff-regions.json": _json_bytes(_build_diff_regions(assets)),
+        "contracts/reference-relationships.json": _json_bytes(
+            _build_reference_relationships()
+        ),
+        "contracts/viewport-calibration.json": _json_bytes(
+            _build_viewport_calibrations(assets)
+        ),
+        "contracts/design-rule-cascade.json": _json_bytes(
+            _build_design_rule_cascade()
+        ),
+        "contracts/design-inconsistencies.json": _json_bytes(
+            _build_design_inconsistencies()
+        ),
+        "contracts/deterministic-fixtures.json": _json_bytes(
+            _build_deterministic_fixtures(assets)
+        ),
+        "contracts/traceability-map.json": _json_bytes(
+            _build_traceability_map(assets)
+        ),
+        "contracts/navigation-reconciliation.json": _json_bytes(
+            _build_navigation_reconciliation(assets)
+        ),
+        "contracts/motion-contract.json": _json_bytes(_build_motion_contract()),
+        "contracts/semantic-visual-encoding.json": _json_bytes(
+            _build_semantic_visual_encoding()
+        ),
         "reports/validation-report.json": _json_bytes(
             {
                 "schemaVersion": SCHEMA_VERSION,

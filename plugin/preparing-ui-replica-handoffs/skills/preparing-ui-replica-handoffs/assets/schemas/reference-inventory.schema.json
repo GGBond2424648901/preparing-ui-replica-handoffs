@@ -39,12 +39,24 @@
         "en-US": { "type": "string" }
       }
     },
+    "bounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
     "reference": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "referenceId", "assetId", "role", "scope", "authorityClass",
-        "title", "appliesToPageIdentities", "shellIds", "componentIds",
+        "title", "titleEvidence", "designLanguageSetIds", "version", "theme", "module", "disposition",
+        "appliesToPageIdentities", "shellIds", "componentIds",
         "styleSections", "extractedRuleIds", "status", "evidenceLevel", "gapIds"
       ],
       "properties": {
@@ -65,6 +77,36 @@
           ]
         },
         "title": { "$ref": "#/$defs/localizedText" },
+        "titleEvidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["classification", "transcription", "bounds", "evidenceLevel", "gapIds"],
+          "properties": {
+            "classification": { "enum": ["visible-title", "no-visible-title", "unknown"] },
+            "transcription": { "$ref": "#/$defs/localizedText" },
+            "bounds": { "anyOf": [{ "$ref": "#/$defs/bounds" }, { "type": "null" }] },
+            "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
+            "gapIds": { "$ref": "#/$defs/gapIds" }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "classification": { "const": "visible-title" } } },
+              "then": { "properties": { "bounds": { "$ref": "#/$defs/bounds" } } }
+            },
+            {
+              "if": { "anyOf": [
+                { "properties": { "classification": { "const": "unknown" } } },
+                { "properties": { "evidenceLevel": { "const": "unknown" } } }
+              ] },
+              "then": { "properties": { "gapIds": { "minItems": 1 } } }
+            }
+          ]
+        },
+        "designLanguageSetIds": { "type": "array", "items": { "type": "string", "pattern": "^DLS[0-9]{3,}$" }, "uniqueItems": true },
+        "version": { "type": ["string", "null"] },
+        "theme": { "type": ["string", "null"] },
+        "module": { "type": ["string", "null"] },
+        "disposition": { "enum": ["page-candidate", "reference-only", "content-asset", "unknown"] },
         "appliesToPageIdentities": { "type": "array", "items": { "$ref": "#/$defs/identity" } },
         "shellIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
         "componentIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },

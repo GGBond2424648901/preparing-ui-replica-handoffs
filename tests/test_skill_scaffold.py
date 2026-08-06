@@ -84,6 +84,19 @@ SCAFFOLD_ENTRY_CONTRACT = {
                 "diff-regions.schema.json",
                 "handoff-config.schema.json",
                 "implementation-map.schema.json",
+                "implementation-plan.schema.json",
+                "application-system.schema.json",
+                "reference-inventory.schema.json",
+                "reference-relationships.schema.json",
+                "viewport-calibration.schema.json",
+                "design-rule-cascade.schema.json",
+                "design-inconsistencies.schema.json",
+                "deterministic-fixtures.schema.json",
+                "traceability-map.schema.json",
+                "navigation-reconciliation.schema.json",
+                "motion-contract.schema.json",
+                "semantic-visual-encoding.schema.json",
+                "micro-visual-contract.schema.json",
                 "page-inventory.schema.json",
                 "ui-style-contract.schema.json",
             },
@@ -114,12 +127,14 @@ SCAFFOLD_ENTRY_CONTRACT = {
                 "design-catalog.template.md",
                 "page-contract.template.md",
                 "ui-implementation-guide.template.md",
+                "ui-design-language.template.md",
             },
             "allowed": {
                 "component-specification.template.md",
                 "design-catalog.template.md",
                 "page-contract.template.md",
                 "ui-implementation-guide.template.md",
+                "ui-design-language.template.md",
             },
         },
     },
@@ -131,12 +146,14 @@ SCAFFOLD_ENTRY_CONTRACT = {
                 "design-catalog.template.md",
                 "page-contract.template.md",
                 "ui-implementation-guide.template.md",
+                "ui-design-language.template.md",
             },
             "allowed": {
                 "component-specification.template.md",
                 "design-catalog.template.md",
                 "page-contract.template.md",
                 "ui-implementation-guide.template.md",
+                "ui-design-language.template.md",
             },
         },
     },
@@ -199,7 +216,7 @@ class SkillScaffoldTests(unittest.TestCase):
             'display_name: "UI 复刻交付准备 / UI Replica Handoff Prep"', agent_content
         )
         self.assertIn(
-            'short_description: "中英双语 UI 复刻交付准备 / Bilingual UI handoff preparation"',
+            'short_description: "多图设计语言+导航+动效的中英 UI 复刻交付 / Bilingual evidence-graph UI handoff"',
             agent_content,
         )
         self.assertIn("default_prompt:", agent_content)

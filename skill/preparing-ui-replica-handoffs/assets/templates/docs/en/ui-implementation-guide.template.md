@@ -49,6 +49,24 @@ sectionId: desktop-web-first
 
 The default policy is `desktop-web` + `desktop-hybrid-elastic`: fixed/sticky shell → fluid or bounded-fluid primary workspace → component min/base/max dimensions → function-owned page/region/hybrid scrolling → approved reflow. Ordinary vertical content prefers page scrolling; tables, code, workflows, canvases, and logs may use dedicated scroll surfaces. A narrow desktop window or browser zoom does not automatically become a mobile single column; mobile uses a separate `variantId`.
 
+sectionId: evidence-graph-and-navigation
+
+## Evidence Graph and Navigation Freeze
+
+Before page implementation, complete reference relationships, UI-viewport calibration, multi-board design-language sets/rule cascade, inconsistency treatment, deterministic fixtures, traceability, and navigation reconciliation. Aggregate labels, icons, order, hierarchy, routes, and permissions from every board, resolve omissions/extras/differences, and freeze one canonical tree; do not approve pages against unfrozen navigation.
+
+sectionId: material-controls-and-motion
+
+## Governing Material, Control Inheritance, and Motion
+
+Decompose Apple-like, frosted, premium-glass, translucent-frosted, and other governing language into material tokens/rules inherited by every state of buttons, search, inputs, radio/checkbox, switches, selects, navigation, cards, table actions, and overlays. Use `MOT###` for hover/focus/press/selection/expand/enter behavior with start/end visuals, timing, animated properties, equivalent focus, and Reduced Motion; static evidence that cannot prove motion remains unresolved.
+
+sectionId: semantic-visual-implementation
+
+## Semantic-state implementation and acceptance
+
+Generate dimension-isolated semantic tokens/variants from `semantic-visual-encoding.json`; never merge by color name. Table status columns, filters, detail labels, metric cards, navigation badges, and dialogs reference the same `SEMVAL###`. Preserve evidenced text/background/border/dot/icon colors and pill geometry, and register color, geometry, and contrast `semanticTargets` for every page-used value.
+
 sectionId: qa-and-git-safety
 
 ## QA and Git Safety

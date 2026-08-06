@@ -36,6 +36,15 @@ SCHEMA_CONTRACTS = {
     "contracts/implementation-plan.json": "implementation-plan.schema.json",
     "contracts/capture-profile.json": "capture-profile.schema.json",
     "contracts/diff-regions.json": "diff-regions.schema.json",
+    "contracts/reference-relationships.json": "reference-relationships.schema.json",
+    "contracts/viewport-calibration.json": "viewport-calibration.schema.json",
+    "contracts/design-rule-cascade.json": "design-rule-cascade.schema.json",
+    "contracts/design-inconsistencies.json": "design-inconsistencies.schema.json",
+    "contracts/deterministic-fixtures.json": "deterministic-fixtures.schema.json",
+    "contracts/traceability-map.json": "traceability-map.schema.json",
+    "contracts/navigation-reconciliation.json": "navigation-reconciliation.schema.json",
+    "contracts/motion-contract.json": "motion-contract.schema.json",
+    "contracts/semantic-visual-encoding.json": "semantic-visual-encoding.schema.json",
     "contracts/design-lock.json": "design-lock.schema.json",
 }
 CSV_FIELDS = {
@@ -135,7 +144,12 @@ PAGE_SECTION_CONTRACT_FIELDS = {
         "interactions",
         "responsiveVariants",
     ),
-    "micro-visual-contract": ("referenceIds", "microVisualFeatureIds"),
+    "micro-visual-contract": (
+        "referenceIds",
+        "microVisualFeatureIds",
+        "semanticDimensionIds",
+        "semanticValueIds",
+    ),
     "application-integration": ("route", "shell", "components"),
     "qa-and-gaps": ("acceptanceCriteria", "gapIds"),
 }
@@ -1127,6 +1141,707 @@ def _check_required_collections(
         )
 
 
+def _check_evidence_graph(documents: dict[str, dict], issues: list[dict]) -> None:
+    """Validate the cross-contract evidence chain, not only each JSON shape."""
+
+    references = {
+        item.get("referenceId"): item
+        for item in (documents.get("contracts/reference-inventory.json") or {}).get(
+            "references", []
+        )
+        if isinstance(item, dict) and item.get("referenceId")
+    }
+    assets = {
+        item.get("assetId")
+        for item in (documents.get("contracts/asset-manifest.json") or {}).get(
+            "assets", []
+        )
+        if isinstance(item, dict) and item.get("assetId")
+    }
+    pages = [
+        item
+        for item in (documents.get("contracts/page-inventory.json") or {}).get(
+            "pages", []
+        )
+        if isinstance(item, dict)
+    ]
+    page_identities = {_identity(item) for item in pages}
+    qa_ids = {
+        qa.get("qaId")
+        for page in pages
+        for qa in page.get("acceptanceCriteria", [])
+        if isinstance(qa, dict) and qa.get("qaId")
+    }
+
+    relationships = {
+        item.get("relationshipId"): item
+        for item in (
+            documents.get("contracts/reference-relationships.json") or {}
+        ).get("relationships", [])
+        if isinstance(item, dict) and item.get("relationshipId")
+    }
+    for relationship_id, item in relationships.items():
+        for field in ("fromReferenceId", "toReferenceId"):
+            if item.get(field) not in references:
+                issues.append(
+                    _issue(
+                        "EVIDENCE_RELATIONSHIP_REFERENCE_MISSING",
+                        "contracts/reference-relationships.json",
+                        "reference relationship endpoint does not resolve",
+                        relationshipId=relationship_id,
+                        field=field,
+                        referenceId=item.get(field),
+                    )
+                )
+
+    calibrations = {
+        item.get("calibrationId"): item
+        for item in (documents.get("contracts/viewport-calibration.json") or {}).get(
+            "calibrations", []
+        )
+        if isinstance(item, dict) and item.get("calibrationId")
+    }
+    for calibration_id, item in calibrations.items():
+        if item.get("referenceId") not in references:
+            issues.append(
+                _issue(
+                    "CALIBRATION_REFERENCE_MISSING",
+                    "contracts/viewport-calibration.json",
+                    "viewport calibration reference does not resolve",
+                    calibrationId=calibration_id,
+                    referenceId=item.get("referenceId"),
+                )
+            )
+        canvas = item.get("sourceCanvas") or {}
+        bounds = item.get("uiViewportBounds") or {}
+        if all(isinstance(bounds.get(key), (int, float)) for key in ("x", "y", "width", "height")) and all(
+            isinstance(canvas.get(key), (int, float)) for key in ("width", "height")
+        ):
+            if (
+                bounds["x"] + bounds["width"] > canvas["width"]
+                or bounds["y"] + bounds["height"] > canvas["height"]
+            ):
+                issues.append(
+                    _issue(
+                        "CALIBRATION_BOUNDS_OUTSIDE_SOURCE",
+                        "contracts/viewport-calibration.json",
+                        "UI viewport bounds exceed the source image canvas",
+                        calibrationId=calibration_id,
+                    )
+                )
+        for region in item.get("presentationRegions", []):
+            if (
+                isinstance(region, dict)
+                and region.get("includeInImplementation") is True
+                and region.get("role") != "real-ui"
+            ):
+                issues.append(
+                    _issue(
+                        "PRESENTATION_REGION_INCLUDED_AS_UI",
+                        "contracts/viewport-calibration.json",
+                        "annotations, redlines, measurements, frames, and other presentation matter must not be implemented as real UI",
+                        calibrationId=calibration_id,
+                        presentationRegionId=region.get("presentationRegionId"),
+                        role=region.get("role"),
+                    )
+                )
+
+    cascade = documents.get("contracts/design-rule-cascade.json") or {}
+    sets = {
+        item.get("designLanguageSetId"): item
+        for item in cascade.get("designLanguageSets", [])
+        if isinstance(item, dict) and item.get("designLanguageSetId")
+    }
+    rules = {
+        item.get("ruleId"): item
+        for item in cascade.get("rules", [])
+        if isinstance(item, dict) and item.get("ruleId")
+    }
+    set_reference_ids = {
+        reference_id
+        for item in sets.values()
+        for reference_id in item.get("referenceIds", [])
+    }
+    for reference_id, reference in references.items():
+        title_evidence = reference.get("titleEvidence") or {}
+        transcription = title_evidence.get("transcription") or {}
+        title_text = " ".join(
+            str(value) for value in transcription.values() if isinstance(value, str)
+        ).casefold()
+        title_declares_design_language = any(
+            marker in title_text
+            for marker in (
+                "ui design language",
+                "design system",
+                "ui设计语言",
+                "ui 设计语言",
+                "设计语言",
+                "视觉规范",
+            )
+        )
+        if (
+            title_evidence.get("classification") == "visible-title"
+            and title_declares_design_language
+            and reference.get("role") != "design-language-reference"
+        ):
+            issues.append(
+                _issue(
+                    "VISIBLE_DESIGN_LANGUAGE_TITLE_MISCLASSIFIED",
+                    "contracts/reference-inventory.json",
+                    "a visibly titled design-language board must be classified as design-language-reference",
+                    referenceId=reference_id,
+                )
+            )
+        if (
+            reference.get("role") == "design-language-reference"
+            and reference_id not in set_reference_ids
+        ):
+            issues.append(
+                _issue(
+                    "DESIGN_LANGUAGE_REFERENCE_UNGROUPED",
+                    "contracts/design-rule-cascade.json",
+                    "every design-language board must belong to an explicit design-language set",
+                    referenceId=reference_id,
+                )
+            )
+        for set_id in reference.get("designLanguageSetIds", []):
+            if set_id not in sets:
+                issues.append(
+                    _issue(
+                        "REFERENCE_DESIGN_LANGUAGE_SET_MISSING",
+                        "contracts/reference-inventory.json",
+                        "reference design-language set membership does not resolve",
+                        referenceId=reference_id,
+                        designLanguageSetId=set_id,
+                    )
+                )
+    for set_id, item in sets.items():
+        for reference_id in item.get("referenceIds", []):
+            if reference_id not in references:
+                issues.append(
+                    _issue(
+                        "DESIGN_LANGUAGE_SET_REFERENCE_MISSING",
+                        "contracts/design-rule-cascade.json",
+                        "design-language set source reference does not resolve",
+                        designLanguageSetId=set_id,
+                        referenceId=reference_id,
+                    )
+                )
+            elif set_id not in references[reference_id].get("designLanguageSetIds", []):
+                issues.append(
+                    _issue(
+                        "DESIGN_LANGUAGE_SET_MEMBERSHIP_MISMATCH",
+                        "contracts/design-rule-cascade.json",
+                        "design-language set and reference inventory membership must be bidirectional",
+                        designLanguageSetId=set_id,
+                        referenceId=reference_id,
+                    )
+                )
+        for rule_id in item.get("ruleIds", []):
+            if rule_id not in rules:
+                issues.append(
+                    _issue(
+                        "DESIGN_LANGUAGE_SET_RULE_MISSING",
+                        "contracts/design-rule-cascade.json",
+                        "design-language set rule does not resolve",
+                        designLanguageSetId=set_id,
+                        ruleId=rule_id,
+                    )
+                )
+    for rule_id, item in rules.items():
+        if item.get("designLanguageSetId") not in sets:
+            issues.append(
+                _issue(
+                    "DESIGN_RULE_SET_MISSING",
+                    "contracts/design-rule-cascade.json",
+                    "design rule does not resolve to a design-language set",
+                    ruleId=rule_id,
+                    designLanguageSetId=item.get("designLanguageSetId"),
+                )
+            )
+        for source in item.get("sourceEvidence", []):
+            if isinstance(source, dict) and source.get("referenceId") not in references:
+                issues.append(
+                    _issue(
+                        "DESIGN_RULE_SOURCE_REFERENCE_MISSING",
+                        "contracts/design-rule-cascade.json",
+                        "design rule evidence reference does not resolve",
+                        ruleId=rule_id,
+                        referenceId=source.get("referenceId"),
+                    )
+                )
+    for conflict in cascade.get("conflicts", []):
+        if not isinstance(conflict, dict):
+            continue
+        if conflict.get("resolutionStatus") == "open":
+            issues.append(
+                _issue(
+                    "DESIGN_RULE_CONFLICT_UNRESOLVED",
+                    "contracts/design-rule-cascade.json",
+                    "conflicting design-language rules require an explicit evidence-backed resolution",
+                    conflictId=conflict.get("conflictId"),
+                )
+            )
+        winner = conflict.get("winnerRuleId")
+        if winner is not None and winner not in rules:
+            issues.append(
+                _issue(
+                    "DESIGN_RULE_CONFLICT_WINNER_MISSING",
+                    "contracts/design-rule-cascade.json",
+                    "resolved design-rule conflict winner does not resolve",
+                    conflictId=conflict.get("conflictId"),
+                    winnerRuleId=winner,
+                )
+            )
+
+    inconsistencies = {
+        item.get("inconsistencyId"): item
+        for item in (
+            documents.get("contracts/design-inconsistencies.json") or {}
+        ).get("inconsistencies", [])
+        if isinstance(item, dict) and item.get("inconsistencyId")
+    }
+    for inconsistency_id, item in inconsistencies.items():
+        for reference_id in [
+            *item.get("referenceIds", []),
+            *item.get("winningEvidenceReferenceIds", []),
+        ]:
+            if reference_id not in references:
+                issues.append(
+                    _issue(
+                        "INCONSISTENCY_REFERENCE_MISSING",
+                        "contracts/design-inconsistencies.json",
+                        "design inconsistency evidence reference does not resolve",
+                        inconsistencyId=inconsistency_id,
+                        referenceId=reference_id,
+                    )
+                )
+        if item.get("status") == "open" and item.get("severity") in {"major", "blocker"}:
+            issues.append(
+                _issue(
+                    "MAJOR_DESIGN_INCONSISTENCY_OPEN",
+                    "contracts/design-inconsistencies.json",
+                    "major or blocker design inconsistency must be resolved before handoff approval",
+                    inconsistencyId=inconsistency_id,
+                )
+            )
+
+    fixtures = {
+        item.get("fixtureId"): item
+        for item in (
+            documents.get("contracts/deterministic-fixtures.json") or {}
+        ).get("fixtures", [])
+        if isinstance(item, dict) and item.get("fixtureId")
+    }
+    for fixture_id, item in fixtures.items():
+        if _identity(item) not in page_identities:
+            issues.append(
+                _issue(
+                    "FIXTURE_PAGE_IDENTITY_MISSING",
+                    "contracts/deterministic-fixtures.json",
+                    "deterministic fixture page identity does not resolve",
+                    fixtureId=fixture_id,
+                )
+            )
+        for asset_id in item.get("assetIds", []):
+            if asset_id not in assets:
+                issues.append(
+                    _issue(
+                        "FIXTURE_ASSET_MISSING",
+                        "contracts/deterministic-fixtures.json",
+                        "deterministic fixture asset does not resolve",
+                        fixtureId=fixture_id,
+                        assetId=asset_id,
+                    )
+                )
+
+    trace_entries = {
+        item.get("traceabilityId"): item
+        for item in (documents.get("contracts/traceability-map.json") or {}).get(
+            "entries", []
+        )
+        if isinstance(item, dict) and item.get("traceabilityId")
+    }
+    for traceability_id, item in trace_entries.items():
+        for reference_id in item.get("sourceReferenceIds", []):
+            if reference_id not in references:
+                issues.append(
+                    _issue(
+                        "TRACEABILITY_REFERENCE_MISSING",
+                        "contracts/traceability-map.json",
+                        "traceability source reference does not resolve",
+                        traceabilityId=traceability_id,
+                        referenceId=reference_id,
+                    )
+                )
+        for rule_id in item.get("sourceRuleIds", []):
+            if rule_id not in rules:
+                issues.append(
+                    _issue(
+                        "TRACEABILITY_RULE_MISSING",
+                        "contracts/traceability-map.json",
+                        "traceability design rule does not resolve",
+                        traceabilityId=traceability_id,
+                        ruleId=rule_id,
+                    )
+                )
+        for identity in item.get("pageIdentities", []):
+            if isinstance(identity, dict) and _identity(identity) not in page_identities:
+                issues.append(
+                    _issue(
+                        "TRACEABILITY_PAGE_IDENTITY_MISSING",
+                        "contracts/traceability-map.json",
+                        "traceability page identity does not resolve",
+                        traceabilityId=traceability_id,
+                    )
+                )
+        for qa_id in item.get("qaIds", []):
+            if qa_id not in qa_ids:
+                issues.append(
+                    _issue(
+                        "TRACEABILITY_QA_MISSING",
+                        "contracts/traceability-map.json",
+                        "traceability QA endpoint does not resolve",
+                        traceabilityId=traceability_id,
+                        qaId=qa_id,
+                    )
+                )
+
+    navigation_systems = {
+        item.get("navigationSystemId"): item
+        for item in (
+            documents.get("contracts/navigation-reconciliation.json") or {}
+        ).get("navigationSystems", [])
+        if isinstance(item, dict) and item.get("navigationSystemId")
+    }
+    for navigation_system_id, item in navigation_systems.items():
+        for reference_id in item.get("sourceReferenceIds", []):
+            if reference_id not in references:
+                issues.append(
+                    _issue(
+                        "NAVIGATION_SOURCE_REFERENCE_MISSING",
+                        "contracts/navigation-reconciliation.json",
+                        "navigation reconciliation source reference does not resolve",
+                        navigationSystemId=navigation_system_id,
+                        referenceId=reference_id,
+                    )
+                )
+        observations = {
+            observation.get("observationId"): observation
+            for observation in item.get("observations", [])
+            if isinstance(observation, dict) and observation.get("observationId")
+        }
+        canonical_entries = {
+            entry.get("navigationEntryId"): entry
+            for entry in item.get("canonicalEntries", [])
+            if isinstance(entry, dict) and entry.get("navigationEntryId")
+        }
+        for observation_id, observation in observations.items():
+            if observation.get("referenceId") not in references:
+                issues.append(
+                    _issue(
+                        "NAVIGATION_OBSERVATION_REFERENCE_MISSING",
+                        "contracts/navigation-reconciliation.json",
+                        "navigation observation reference does not resolve",
+                        navigationSystemId=navigation_system_id,
+                        observationId=observation_id,
+                        referenceId=observation.get("referenceId"),
+                    )
+                )
+            identity = observation.get("pageIdentity")
+            if isinstance(identity, dict) and _identity(identity) not in page_identities:
+                issues.append(
+                    _issue(
+                        "NAVIGATION_OBSERVATION_PAGE_MISSING",
+                        "contracts/navigation-reconciliation.json",
+                        "navigation observation page identity does not resolve",
+                        navigationSystemId=navigation_system_id,
+                        observationId=observation_id,
+                    )
+                )
+        for navigation_entry_id, entry in canonical_entries.items():
+            for observation_id in entry.get("sourceObservationIds", []):
+                if observation_id not in observations:
+                    issues.append(
+                        _issue(
+                            "NAVIGATION_ENTRY_OBSERVATION_MISSING",
+                            "contracts/navigation-reconciliation.json",
+                            "canonical navigation entry source observation does not resolve",
+                            navigationSystemId=navigation_system_id,
+                            navigationEntryId=navigation_entry_id,
+                            observationId=observation_id,
+                        )
+                    )
+            parent_id = entry.get("parentNavigationEntryId")
+            if parent_id is not None and parent_id not in canonical_entries:
+                issues.append(
+                    _issue(
+                        "NAVIGATION_PARENT_ENTRY_MISSING",
+                        "contracts/navigation-reconciliation.json",
+                        "canonical navigation parent entry does not resolve",
+                        navigationSystemId=navigation_system_id,
+                        navigationEntryId=navigation_entry_id,
+                        parentNavigationEntryId=parent_id,
+                    )
+                )
+        for discrepancy in item.get("discrepancies", []):
+            if not isinstance(discrepancy, dict):
+                continue
+            discrepancy_id = discrepancy.get("navigationDiscrepancyId")
+            if discrepancy.get("status") == "open":
+                issues.append(
+                    _issue(
+                        "NAVIGATION_DISCREPANCY_UNRESOLVED",
+                        "contracts/navigation-reconciliation.json",
+                        "navigation additions, omissions, labels, icons, order, routes, and permissions must be reconciled before freeze",
+                        navigationSystemId=navigation_system_id,
+                        navigationDiscrepancyId=discrepancy_id,
+                    )
+                )
+            for reference_id in discrepancy.get("referenceIds", []):
+                if reference_id not in references:
+                    issues.append(
+                        _issue(
+                            "NAVIGATION_DISCREPANCY_REFERENCE_MISSING",
+                            "contracts/navigation-reconciliation.json",
+                            "navigation discrepancy reference does not resolve",
+                            navigationDiscrepancyId=discrepancy_id,
+                            referenceId=reference_id,
+                        )
+                    )
+            for observation_id in discrepancy.get("winningObservationIds", []):
+                if observation_id not in observations:
+                    issues.append(
+                        _issue(
+                            "NAVIGATION_DISCREPANCY_WINNER_MISSING",
+                            "contracts/navigation-reconciliation.json",
+                            "navigation discrepancy winning observation does not resolve",
+                            navigationDiscrepancyId=discrepancy_id,
+                            observationId=observation_id,
+                        )
+                    )
+            for navigation_entry_id in discrepancy.get(
+                "affectedNavigationEntryIds", []
+            ):
+                if navigation_entry_id not in canonical_entries:
+                    issues.append(
+                        _issue(
+                            "NAVIGATION_DISCREPANCY_ENTRY_MISSING",
+                            "contracts/navigation-reconciliation.json",
+                            "navigation discrepancy canonical entry does not resolve",
+                            navigationDiscrepancyId=discrepancy_id,
+                            navigationEntryId=navigation_entry_id,
+                        )
+                    )
+    motions = {
+        motion.get("motionId"): motion
+        for motion in (documents.get("contracts/motion-contract.json") or {}).get(
+            "motions", []
+        )
+        if isinstance(motion, dict) and motion.get("motionId")
+    }
+    for motion_id, motion in motions.items():
+        for source in motion.get("sourceEvidence", []):
+            if isinstance(source, dict) and source.get("referenceId") not in references:
+                issues.append(
+                    _issue(
+                        "MOTION_SOURCE_REFERENCE_MISSING",
+                        "contracts/motion-contract.json",
+                        "motion source evidence reference does not resolve",
+                        motionId=motion_id,
+                        referenceId=source.get("referenceId"),
+                    )
+                )
+        for reference_id in motion.get("stateFrameReferenceIds", []):
+            if reference_id not in references:
+                issues.append(
+                    _issue(
+                        "MOTION_STATE_FRAME_REFERENCE_MISSING",
+                        "contracts/motion-contract.json",
+                        "motion state-frame reference does not resolve",
+                        motionId=motion_id,
+                        referenceId=reference_id,
+                    )
+                )
+
+    semantic_dimensions = {
+        dimension.get("semanticDimensionId"): dimension
+        for dimension in (
+            documents.get("contracts/semantic-visual-encoding.json") or {}
+        ).get("dimensions", [])
+        if isinstance(dimension, dict) and dimension.get("semanticDimensionId")
+    }
+    semantic_values = {}
+    semantic_value_dimensions = {}
+    for dimension_id, dimension in semantic_dimensions.items():
+        for reference_id in dimension.get("sourceReferenceIds", []):
+            if reference_id not in references:
+                issues.append(
+                    _issue(
+                        "SEMANTIC_DIMENSION_SOURCE_REFERENCE_MISSING",
+                        "contracts/semantic-visual-encoding.json",
+                        "semantic visual dimension source reference does not resolve",
+                        semanticDimensionId=dimension_id,
+                        referenceId=reference_id,
+                    )
+                )
+        seen_codes = set()
+        for value in dimension.get("values", []):
+            if not isinstance(value, dict) or not value.get("semanticValueId"):
+                continue
+            value_id = value["semanticValueId"]
+            if value_id in semantic_values:
+                issues.append(
+                    _issue(
+                        "SEMANTIC_VALUE_ID_DUPLICATE",
+                        "contracts/semantic-visual-encoding.json",
+                        "semantic visual value IDs must be globally unique",
+                        semanticValueId=value_id,
+                    )
+                )
+            semantic_values[value_id] = value
+            semantic_value_dimensions[value_id] = dimension_id
+            code = value.get("code")
+            if code in seen_codes:
+                issues.append(
+                    _issue(
+                        "SEMANTIC_VALUE_CODE_DUPLICATE",
+                        "contracts/semantic-visual-encoding.json",
+                        "semantic value codes must be unique within one dimension",
+                        semanticDimensionId=dimension_id,
+                        code=code,
+                    )
+                )
+            seen_codes.add(code)
+            for source in value.get("sourceEvidence", []):
+                if isinstance(source, dict) and source.get("referenceId") not in references:
+                    issues.append(
+                        _issue(
+                            "SEMANTIC_VALUE_SOURCE_REFERENCE_MISSING",
+                            "contracts/semantic-visual-encoding.json",
+                            "semantic visual value source reference does not resolve",
+                            semanticValueId=value_id,
+                            referenceId=source.get("referenceId"),
+                        )
+                    )
+
+    diff_pages = {
+        _identity(diff_page): diff_page
+        for diff_page in (documents.get("contracts/diff-regions.json") or {}).get(
+            "pages", []
+        )
+        if isinstance(diff_page, dict)
+    }
+
+    for page in pages:
+        identity_name = _identity_text(_identity(page))
+        linked_collections = (
+            ("referenceRelationshipIds", relationships, "PAGE_RELATIONSHIP_MISSING"),
+            ("calibrationIds", calibrations, "PAGE_CALIBRATION_MISSING"),
+            ("inheritedDesignRuleIds", rules, "PAGE_DESIGN_RULE_MISSING"),
+            ("inconsistencyIds", inconsistencies, "PAGE_INCONSISTENCY_MISSING"),
+            ("fixtureIds", fixtures, "PAGE_FIXTURE_MISSING"),
+            ("traceabilityIds", trace_entries, "PAGE_TRACEABILITY_MISSING"),
+            ("navigationSystemIds", navigation_systems, "PAGE_NAVIGATION_SYSTEM_MISSING"),
+            ("motionIds", motions, "PAGE_MOTION_MISSING"),
+            ("semanticDimensionIds", semantic_dimensions, "PAGE_SEMANTIC_DIMENSION_MISSING"),
+            ("semanticValueIds", semantic_values, "PAGE_SEMANTIC_VALUE_MISSING"),
+        )
+        for field, registry, code in linked_collections:
+            for linked_id in page.get(field, []):
+                if linked_id not in registry:
+                    issues.append(
+                        _issue(
+                            code,
+                            "contracts/page-inventory.json",
+                            "page evidence-graph link does not resolve",
+                            identity=identity_name,
+                            field=field,
+                            linkedId=linked_id,
+                        )
+                    )
+        if page.get("status") == "approved":
+            for field, registry in (
+                ("calibrationIds", calibrations),
+                ("fixtureIds", fixtures),
+                ("traceabilityIds", trace_entries),
+                ("motionIds", motions),
+                ("semanticDimensionIds", semantic_dimensions),
+                ("semanticValueIds", semantic_values),
+            ):
+                for linked_id in page.get(field, []):
+                    linked = registry.get(linked_id)
+                    if isinstance(linked, dict) and linked.get("status") != "approved":
+                        issues.append(
+                            _issue(
+                                "APPROVED_PAGE_EVIDENCE_NOT_APPROVED",
+                                "contracts/page-inventory.json",
+                                "approved page depends on an unapproved evidence-graph contract",
+                                identity=identity_name,
+                                field=field,
+                                linkedId=linked_id,
+                            )
+                        )
+            for navigation_system_id in page.get("navigationSystemIds", []):
+                navigation_system = navigation_systems.get(navigation_system_id)
+                if (
+                    isinstance(navigation_system, dict)
+                    and navigation_system.get("freezeStatus") != "approved"
+                ):
+                    issues.append(
+                        _issue(
+                            "APPROVED_PAGE_NAVIGATION_NOT_FROZEN",
+                            "contracts/page-inventory.json",
+                            "approved page requires an approved canonical navigation freeze",
+                            identity=identity_name,
+                            navigationSystemId=navigation_system_id,
+                        )
+                    )
+            diff_page = diff_pages.get(_identity(page)) or {}
+            motion_target_ids = {
+                target.get("motionId")
+                for target in diff_page.get("motionTargets", [])
+                if isinstance(target, dict)
+            }
+            for motion_id in page.get("motionIds", []):
+                if motion_id not in motion_target_ids:
+                    issues.append(
+                        _issue(
+                            "MOTION_DIFF_COVERAGE_MISSING",
+                            "contracts/diff-regions.json",
+                            "approved page motion requires start/intermediate/end Diff coverage",
+                            identity=identity_name,
+                            motionId=motion_id,
+                        )
+                    )
+            semantic_target_ids = {
+                target.get("semanticValueId")
+                for target in diff_page.get("semanticTargets", [])
+                if isinstance(target, dict)
+            }
+            for semantic_value_id in page.get("semanticValueIds", []):
+                dimension_id = semantic_value_dimensions.get(semantic_value_id)
+                if dimension_id not in page.get("semanticDimensionIds", []):
+                    issues.append(
+                        _issue(
+                            "PAGE_SEMANTIC_VALUE_DIMENSION_MISMATCH",
+                            "contracts/page-inventory.json",
+                            "page semantic value must also link its owning semantic dimension",
+                            identity=identity_name,
+                            semanticValueId=semantic_value_id,
+                            semanticDimensionId=dimension_id,
+                        )
+                    )
+                if semantic_value_id not in semantic_target_ids:
+                    issues.append(
+                        _issue(
+                            "SEMANTIC_DIFF_COVERAGE_MISSING",
+                            "contracts/diff-regions.json",
+                            "approved page semantic value requires color, geometry, and contrast Diff coverage",
+                            identity=identity_name,
+                            semanticValueId=semantic_value_id,
+                        )
+                    )
 def _check_implementation_coverage(
     documents: dict[str, dict],
     identities: set[tuple[object, object, object]],
@@ -3136,6 +3851,7 @@ def validate_handoff(
             _validate_schemas(documents, issues)
             _check_required_collections(documents, csv_documents, issues)
             _check_duplicate_identities(documents, issues)
+            _check_evidence_graph(documents, issues)
             for relative_path, document in documents.items():
                 if relative_path.startswith("contracts/") and relative_path != "contracts/design-lock.json":
                     _check_unknown_gaps(document, relative_path, issues)

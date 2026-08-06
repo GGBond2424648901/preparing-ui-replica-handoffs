@@ -23,6 +23,22 @@ sectionId: states-and-variants
 
 {{componentStatesAndVariants}}
 
+按钮、图标按钮、搜索、输入框、单选、多选、开关、下拉、多选标签、Tab、分页、表格操作、导航项、卡片、弹窗和抽屉必须逐状态引用主体视觉语言的 `DR###` 与 `styleTokenRefs`，并列出局部覆盖。组件库默认样式不能绕过主体材质。
+
+sectionId: semantic-visual-components
+
+## 语义标签、圆点与等级组件
+
+{{semanticVisualEncoding}}
+
+优先级、流程状态、证据等级、反馈、审批、风险、同步、权限和 AI 状态不得共用一个“万能 Badge”。组件按 `SEM###` 维度和 `SEMVAL###` 值绑定含义，并记录文字/背景/边框/圆点/图标颜色、胶囊几何、字体、长文案、多语言、对比度及默认/hover/focus-visible/selected/disabled 状态。视觉颜色近似但业务含义错误视为失败。
+
+sectionId: motion-and-focus
+
+## 动效、Hover 与焦点
+
+每个 `MOT###` 记录触发、起止视觉、时长、延迟、缓动、动画属性、变换原点、层级、指针/焦点行为、状态帧证据和 Reduced Motion。鼠标 Hover 必须有键盘 focus-visible 的等价可见反馈。
+
 sectionId: rendering-strategy
 
 ## 渲染与素材策略

@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Cross-reference navigation reconciliation and freeze contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "navigationSystems"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "navigationSystems": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/navigationSystem" } }
+  },
+  "$defs": {
+    "localizedText": {
+      "type": "object", "additionalProperties": false, "required": ["zh-CN", "en-US"],
+      "properties": { "zh-CN": { "type": "string" }, "en-US": { "type": "string" } }
+    },
+    "identity": {
+      "type": "object", "additionalProperties": false, "required": ["pageId", "stateId", "variantId"],
+      "properties": {
+        "pageId": { "type": "string", "pattern": "^P[0-9]{3,}$" },
+        "stateId": { "type": "string", "pattern": "^S[0-9]{2,}$" },
+        "variantId": { "type": "string", "pattern": "^V[0-9]{2,}$" }
+      }
+    },
+    "bounds": {
+      "type": "object", "additionalProperties": false, "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "number" }, "y": { "type": "number" },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "gapIds": {
+      "type": "array", "items": { "type": "string", "pattern": "^G[0-9]{3,}$" }, "uniqueItems": true
+    },
+    "observationEntry": {
+      "type": "object", "additionalProperties": false,
+      "required": ["navigationEvidenceId", "parentEvidenceId", "order", "label", "copyClassification", "iconName", "targetRoute", "visibilityRule", "bounds", "evidenceLevel", "gapIds"],
+      "properties": {
+        "navigationEvidenceId": { "type": "string", "pattern": "^NEV[0-9]{3,}$" },
+        "parentEvidenceId": { "type": ["string", "null"], "pattern": "^NEV[0-9]{3,}$" },
+        "order": { "type": "integer", "minimum": 0 },
+        "label": { "$ref": "#/$defs/localizedText" },
+        "copyClassification": { "enum": ["verbatim", "verified", "inferred", "unknown"] },
+        "iconName": { "type": ["string", "null"] },
+        "targetRoute": { "type": ["string", "null"] },
+        "visibilityRule": { "type": ["string", "null"] },
+        "bounds": { "$ref": "#/$defs/bounds" },
+        "evidenceLevel": { "enum": ["direct", "derived", "candidate", "approved", "unknown"] },
+        "gapIds": { "$ref": "#/$defs/gapIds" }
+      },
+      "allOf": [
+        {
+          "if": { "anyOf": [
+            { "properties": { "copyClassification": { "enum": ["inferred", "unknown"] } } },
+            { "properties": { "evidenceLevel": { "const": "unknown" } } }
+          ] },
+          "then": { "properties": { "gapIds": { "minItems": 1 } } }
+        }
+      ]
+    },
+    "observation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["observationId", "referenceId", "pageIdentity", "navigationPresence", "entries", "evidenceLevel", "gapIds"],
+      "properties": {
+        "observationId": { "type": "string", "pattern": "^NOBS[0-9]{3,}$" },
+        "referenceId": { "type": "string", "pattern": "^REF[0-9]{3,}$" },
+        "pageIdentity": { "anyOf": [{ "$ref": "#/$defs/identity" }, { "type": "null" }] },
+        "navigationPresence": { "enum": ["present", "absent", "unknown"] },
+        "entries": { "type": "array", "items": { "$ref": "#/$defs/observationEntry" } },
+        "evidenceLevel": { "enum": ["direct", "derived", "candidate", "approved", "unknown"] },
+        "gapIds": { "$ref": "#/$defs/gapIds" }
+      },
+      "allOf": [
+        {
+          "if": { "anyOf": [
+            { "properties": { "navigationPresence": { "const": "unknown" } } },
+            { "properties": { "evidenceLevel": { "const": "unknown" } } }
+          ] },
+          "then": { "properties": { "gapIds": { "minItems": 1 } } }
+        }
+      ]
+    },
+    "canonicalEntry": {
+      "type": "object", "additionalProperties": false,
+      "required": ["navigationEntryId", "parentNavigationEntryId", "order", "label", "iconName", "targetRoute", "visibilityRule", "sourceObservationIds", "status", "evidenceLevel", "gapIds"],
+      "properties": {
+        "navigationEntryId": { "type": "string", "pattern": "^NAVITEM[0-9]{3,}$" },
+        "parentNavigationEntryId": { "type": ["string", "null"], "pattern": "^NAVITEM[0-9]{3,}$" },
+        "order": { "type": "integer", "minimum": 0 },
+        "label": { "$ref": "#/$defs/localizedText" },
+        "iconName": { "type": ["string", "null"] },
+        "targetRoute": { "type": ["string", "null"] },
+        "visibilityRule": { "type": ["string", "null"] },
+        "sourceObservationIds": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^NOBS[0-9]{3,}$" }, "uniqueItems": true },
+        "status": { "enum": ["unknown", "proposed", "candidate", "approved"] },
+        "evidenceLevel": { "enum": ["direct", "derived", "candidate", "approved", "unknown"] },
+        "gapIds": { "$ref": "#/$defs/gapIds" }
+      }
+    },
+    "discrepancy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["navigationDiscrepancyId", "type", "referenceIds", "affectedNavigationEntryIds", "resolution", "winningObservationIds", "status", "evidenceLevel", "gapIds"],
+      "properties": {
+        "navigationDiscrepancyId": { "type": "string", "pattern": "^NAVD[0-9]{3,}$" },
+        "type": { "enum": ["missing-entry", "extra-entry", "label-mismatch", "icon-mismatch", "order-mismatch", "parent-mismatch", "route-mismatch", "visibility-mismatch"] },
+        "referenceIds": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^REF[0-9]{3,}$" }, "uniqueItems": true },
+        "affectedNavigationEntryIds": { "type": "array", "items": { "type": "string", "pattern": "^NAVITEM[0-9]{3,}$" }, "uniqueItems": true },
+        "resolution": { "$ref": "#/$defs/localizedText" },
+        "winningObservationIds": { "type": "array", "items": { "type": "string", "pattern": "^NOBS[0-9]{3,}$" }, "uniqueItems": true },
+        "status": { "enum": ["open", "resolved", "approved"] },
+        "evidenceLevel": { "enum": ["direct", "derived", "candidate", "approved", "unknown"] },
+        "gapIds": { "$ref": "#/$defs/gapIds" }
+      },
+      "allOf": [
+        { "if": { "properties": { "status": { "enum": ["resolved", "approved"] } } }, "then": { "properties": { "winningObservationIds": { "minItems": 1 } } } },
+        { "if": { "properties": { "status": { "const": "open" } } }, "then": { "properties": { "gapIds": { "minItems": 1 } } } }
+      ]
+    },
+    "navigationSystem": {
+      "type": "object", "additionalProperties": false,
+      "required": ["navigationSystemId", "shellId", "sourceReferenceIds", "observations", "canonicalEntries", "discrepancies", "freezeStatus", "freezeDecision", "evidenceLevel", "gapIds"],
+      "properties": {
+        "navigationSystemId": { "type": "string", "pattern": "^NAV[0-9]{3,}$" },
+        "shellId": { "type": "string", "minLength": 1 },
+        "sourceReferenceIds": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^REF[0-9]{3,}$" }, "uniqueItems": true },
+        "observations": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/observation" } },
+        "canonicalEntries": { "type": "array", "items": { "$ref": "#/$defs/canonicalEntry" } },
+        "discrepancies": { "type": "array", "items": { "$ref": "#/$defs/discrepancy" } },
+        "freezeStatus": { "enum": ["unknown", "proposed", "candidate", "approved"] },
+        "freezeDecision": { "$ref": "#/$defs/localizedText" },
+        "evidenceLevel": { "enum": ["direct", "derived", "candidate", "approved", "unknown"] },
+        "gapIds": { "$ref": "#/$defs/gapIds" }
+      },
+      "allOf": [
+        {
+          "if": { "anyOf": [
+            { "properties": { "freezeStatus": { "enum": ["unknown", "proposed"] } } },
+            { "properties": { "evidenceLevel": { "const": "unknown" } } }
+          ] },
+          "then": { "properties": { "gapIds": { "minItems": 1 } } }
+        }
+      ]
+    }
+  }
+}

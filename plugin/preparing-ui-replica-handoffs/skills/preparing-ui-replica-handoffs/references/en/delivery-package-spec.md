@@ -147,3 +147,31 @@ ruleId: DP-024
 ruleId: DP-025
 
 `implementation-plan.json` follows global design language/tokens/shell/shared components → page-by-page implementation → system integration. Accept a page only after contract-completeness, structural, visual, interaction, and integrated-navigation gates pass, including its micro-visual features.
+
+sectionId: evidence-graph-contracts
+
+## Evidence-graph machine contracts
+
+ruleId: DP-026
+
+The package includes `reference-relationships.json`, `viewport-calibration.json`, `design-rule-cascade.json`, `design-inconsistencies.json`, `deterministic-fixtures.json`, `traceability-map.json`, `navigation-reconciliation.json`, and `motion-contract.json`. They cross-resolve pages, references, rules, components, implementation targets, and QA IDs; isolated records and dangling IDs are forbidden.
+
+ruleId: DP-027
+
+`design-rule-cascade.json` supports multiple `DLS###` design-language sets and multiple source boards per set. Every `DR###` has at least one source region and may retain several. Conflicts, version supersession, theme/module scope, and page exceptions remain machine-readable instead of scattered prose.
+
+ruleId: DP-028
+
+`navigation-reconciliation.json` aggregates all navigation observations and freezes one canonical tree before page implementation. Missing, extra, label, icon, order, hierarchy, route, and permission differences are resolved individually; affected pages cannot be approved before `freezeStatus: approved`.
+
+ruleId: DP-029
+
+`motion-contract.json` preserves interaction-state/motion evidence, start/end frames, timing, layer/focus behavior, and Reduced Motion. `deterministic-fixtures.json` fixes role/permission, data, clock, timezone, random seed, network, animation, cursor, and scroll positions so Reference/Current/Overlay/Diff are repeatable.
+
+ruleId: DP-030
+
+`traceability-map.json` closes the chain from reference region → design rule/token → component/micro feature/motion → page identity → implementation file/symbol → QA. An approved page's linked calibration, navigation, fixture, traceability, and motion contracts are approved as well.
+
+ruleId: DP-031
+
+`semantic-visual-encoding.json` stores status/grade grammar as `SEM###` dimensions and `SEMVAL###` values. Every value has a source reference and Bounds plus complete color roles, shape, geometry, typography, interaction states, contrast, evidence level, and gaps. Page contracts and Diff targets resolve to these IDs.

@@ -22,7 +22,7 @@ ruleId: PS-003
 
 ruleId: PS-004
 
-原始画布是 1:1 测量基线，不是固定容器或页面/工作区尺寸上限。有效视口更宽时，主工作区应按证据利用可用宽度，并按列比例、伸展权重或有界流式规则分配剩余空间，不能因照抄截图像素宽度而留下设计中没有的大面积空白；有直接证据的 `max-width` 例外。空间不足时保持最小卡片宽度、列比例、文字尺寸和关键位置关系，依据证据选择换行、重排、扩展整页/模块内容范围及整页、模块或混合滚动。禁止用全页 `transform: scale()`，也不得为了塞入窗口而任意压缩、移动或裁切。
+原始画布是 1:1 测量基线，不是固定容器或页面/工作区尺寸上限。有效视口更宽时，主工作区应按证据利用可用宽度，并按列比例、伸展权重或有界流式规则分配剩余空间，不能因照抄截图像素宽度而留下设计中没有的大面积空白；有直接证据的 `max-width` 例外。空间不足时保持最小卡片宽度、列比例、文字尺寸和关键位置关系，依据证据选择换行、重排、扩展整页/模块内容范围，以及整页纵向滚动、浏览器页面水平滚动、模块内滚动或混合滚动。禁止用全页 `transform: scale()`，也不得为了塞入窗口而任意压缩、移动或裁切。
 
 sectionId: regions
 
@@ -115,3 +115,39 @@ ruleId: PS-018
 ruleId: PS-019
 
 逐页合同必须声明其统一应用路由、Shell、导航入口、共享状态/组件、前后页依赖和集成验收。页面可单独开发和截屏验收，但最终不能保留为独立端口或脱离统一 Router 的孤立 Demo。
+
+sectionId: page-evidence-graph
+
+## 页面证据图谱绑定
+
+ruleId: PS-020
+
+每个页面身份必须列出 `referenceRelationshipIds`、`calibrationIds`、`inheritedDesignRuleIds`、`inconsistencyIds`、`fixtureIds`、`traceabilityIds`、`navigationSystemIds` 和 `motionIds`。页面区域坐标使用校准后的真实 UI 视口，不得把源图外框、红线、说明文字或设备框算入组件 Bounds。
+
+ruleId: PS-021
+
+页面先继承适用的主体设计语言，再叠加页面直接证据。按钮、搜索、单选/多选、导航、卡片等每个实例都要能追溯到组件、Token 和 `DR###`；页面特例必须写明覆盖字段和来源，禁止通过复制整套局部样式绕过共享语言。
+
+sectionId: page-navigation-and-motion
+
+## 页面导航与动效状态
+
+ruleId: PS-022
+
+页面只引用已对齐的规范导航项，并明确该页选中项、展开父级、权限可见项、导航标题/图标和目标路由。截图中偶发缺少或增加的导航项不得直接变成页面专属导航，必须先在导航差异合同中解决。
+
+ruleId: PS-023
+
+页面的 hover、focus-visible、pressed、selected、loading、展开/收起和浮层进出状态引用 `MOT###`。交互验收除结果状态外，还要覆盖动效起点、中间关键状态、终点、时间参数和 Reduced Motion；静态截图不能替代可重放状态验收。
+
+sectionId: page-semantic-visuals
+
+## 页面语义视觉使用合同
+
+ruleId: PS-024
+
+页面通过 `semanticDimensionIds` 声明使用哪些语义维度，并用 `semanticValueIds` 精确列出当前页面/状态/变体可见的值。表格列、筛选项、详情标签、统计卡和弹窗不得各自复制一套近似颜色；都引用同一 `SEMVAL###`，页面专属例外必须有直接证据。
+
+ruleId: PS-025
+
+语义标签需同时覆盖默认视图、选中/筛选、hover、focus-visible、禁用、长文案、多语言、深浅背景和高对比环境。优先级、工作流状态、证据等级等不同维度即使同色也不得互换含义；批准页面的每个可见 `SEMVAL###` 必须有 `semanticTargets` Diff。

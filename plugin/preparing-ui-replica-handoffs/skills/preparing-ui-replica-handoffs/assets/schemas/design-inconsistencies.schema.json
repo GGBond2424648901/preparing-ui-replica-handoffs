@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UI design inconsistency ledger",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "inconsistencies"],
+  "properties": { "schemaVersion": { "const": "1.0.0" }, "inconsistencies": { "type": "array", "items": { "$ref": "#/$defs/inconsistency" } } },
+  "$defs": {
+    "localizedText": { "type": "object", "additionalProperties": false, "required": ["zh-CN", "en-US"], "properties": { "zh-CN": { "type": "string" }, "en-US": { "type": "string" } } },
+    "gapIds": { "type": "array", "items": { "type": "string", "pattern": "^G[0-9]{3,}$" }, "uniqueItems": true },
+    "inconsistency": {
+      "type": "object", "additionalProperties": false,
+      "required": ["inconsistencyId", "category", "summary", "referenceIds", "affectedObjectIds", "severity", "treatment", "winningEvidenceReferenceIds", "decisionRationale", "acceptanceImpact", "status", "evidenceLevel", "gapIds"],
+      "properties": {
+        "inconsistencyId": { "type": "string", "pattern": "^INC[0-9]{3,}$" },
+        "category": { "enum": ["component-geometry", "token-conflict", "copy-conflict", "malformed-icon", "impossible-perspective", "alignment", "asset-conflict", "interaction-conflict", "other"] },
+        "summary": { "$ref": "#/$defs/localizedText" },
+        "referenceIds": { "type": "array", "items": { "type": "string", "pattern": "^REF[0-9]{3,}$" }, "minItems": 1, "uniqueItems": true },
+        "affectedObjectIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "uniqueItems": true },
+        "severity": { "enum": ["minor", "major", "blocker"] },
+        "treatment": { "enum": ["preserve-page-specific", "canonicalize", "redraw", "infer-copy", "unresolved"] },
+        "winningEvidenceReferenceIds": { "type": "array", "items": { "type": "string", "pattern": "^REF[0-9]{3,}$" }, "uniqueItems": true },
+        "decisionRationale": { "$ref": "#/$defs/localizedText" },
+        "acceptanceImpact": { "$ref": "#/$defs/localizedText" },
+        "status": { "enum": ["open", "resolved", "approved"] },
+        "evidenceLevel": { "enum": ["direct", "derived", "candidate", "approved", "unknown"] },
+        "gapIds": { "$ref": "#/$defs/gapIds" }
+      },
+      "allOf": [
+        { "if": { "properties": { "status": { "enum": ["resolved", "approved"] } } }, "then": { "properties": { "winningEvidenceReferenceIds": { "minItems": 1 } } } },
+        { "if": { "properties": { "status": { "const": "open" } } }, "then": { "properties": { "gapIds": { "minItems": 1 } } } }
+      ]
+    }
+  }
+}

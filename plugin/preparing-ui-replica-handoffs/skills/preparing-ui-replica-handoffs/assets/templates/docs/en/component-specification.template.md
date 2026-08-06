@@ -23,6 +23,22 @@ sectionId: states-and-variants
 
 {{componentStatesAndVariants}}
 
+Buttons, icon buttons, search, inputs, radio, checkbox, switches, selects, multi-select chips, tabs, pagination, table actions, navigation items, cards, dialogs, and drawers reference governing `DR###` rules and `styleTokenRefs` per state, with local overrides listed. Default component-library styling cannot bypass the governing material language.
+
+sectionId: semantic-visual-components
+
+## Semantic labels, indicators, and grade components
+
+{{semanticVisualEncoding}}
+
+Priority, workflow status, evidence grade, feedback, approval, risk, sync, permission, and AI state do not share one generic Badge. Components bind meaning by `SEM###` dimension and `SEMVAL###` value, recording text/background/border/dot/icon colors, pill geometry, typography, long copy, locales, contrast, and default/hover/focus-visible/selected/disabled states. A visual color match with incorrect business meaning fails.
+
+sectionId: motion-and-focus
+
+## Motion, Hover, and Focus
+
+Every `MOT###` records trigger, initial/final visuals, duration, delay, easing, animated properties, transform origin, stacking, pointer/focus behavior, state-frame evidence, and Reduced Motion. Mouse hover has an equivalent visible keyboard focus state.
+
 sectionId: rendering-strategy
 
 ## Rendering and Asset Strategy
