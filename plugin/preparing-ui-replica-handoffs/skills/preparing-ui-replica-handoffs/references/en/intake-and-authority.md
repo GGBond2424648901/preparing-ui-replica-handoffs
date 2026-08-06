@@ -79,3 +79,15 @@ This skill prepares a `desktop-web` + `desktop-hybrid-elastic` contract by defau
 ruleId: IA-013
 
 A desktop contract distinguishes fixed/sticky shell, fluid or bounded-fluid workspace, min/max-constrained components, page scrolling, and function-owned region scrolling. Mobile single-column layout, hidden navigation, or broad reflow requires a separate `variantId` backed by direct evidence or explicit approval.
+
+sectionId: reference-roles
+
+## Reference-role Classification
+
+ruleId: IA-014
+
+The first visual pass only classifies role: page reference, UI design-language reference, component board, brand board, interaction-state board, motion reference, decorative background, content asset, or unknown. A filename is only a candidate clue, never visual evidence. Assign stable `REF###` identity, scope, and authority class to each item.
+
+ruleId: IA-015
+
+A UI design-language image may become cross-page visual authority only with per-rule scope. A global principle cannot override more specific page-direct evidence, and a page exception cannot contaminate global tokens. Record inheritance, override, exception, and conflict separately.

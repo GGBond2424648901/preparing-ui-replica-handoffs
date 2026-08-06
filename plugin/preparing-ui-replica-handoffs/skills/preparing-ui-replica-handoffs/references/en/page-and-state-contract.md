@@ -103,3 +103,15 @@ Apply and record this order for every desktop region: fixed/sticky shell and too
 ruleId: PS-017
 
 A narrow desktop window or browser zoom does not automatically trigger a mobile single-column layout. Components first shrink to contracted minima. Ordinary vertical content prefers page scrolling, while tables, code, workflows, canvases, logs, and other two-dimensional or continuous surfaces may own region scrolling. Mobile navigation replacement, hidden elements, or single-column reflow requires a mobile design, formal material, or explicit approval.
+
+sectionId: micro-visual-and-integration
+
+## Micro Visuals and System Integration
+
+ruleId: PS-018
+
+Beyond region bounds, each page contract enumerates visible micro features: icons/Logo, curves, rings, cylinders/devices, borders, radii, shadows, opacity, gradients, clipping/masks, and layering. Bind each to `MV###`, source `REF###`, region, rendering strategy, responsive behavior, and Diff tolerance.
+
+ruleId: PS-019
+
+Each page contract declares its unified-application route, shell, navigation entry, shared state/components, page dependencies, and integration acceptance. A page may be developed and captured separately, but cannot remain on its own port or as an isolated demo outside the unified Router.

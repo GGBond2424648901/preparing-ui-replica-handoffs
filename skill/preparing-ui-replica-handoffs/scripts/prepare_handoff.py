@@ -60,10 +60,14 @@ TEMPLATE_ROOT = SKILL_ROOT / "assets" / "templates"
 SCHEMA_ROOT = SKILL_ROOT / "assets" / "schemas"
 SCHEMA_CONTRACTS = {
     "contracts/asset-manifest.json": "asset-manifest.schema.json",
+    "contracts/reference-inventory.json": "reference-inventory.schema.json",
     "contracts/page-inventory.json": "page-inventory.schema.json",
     "contracts/ui-style-contract.json": "ui-style-contract.schema.json",
+    "contracts/micro-visual-contract.json": "micro-visual-contract.schema.json",
     "contracts/component-registry.json": "component-registry.schema.json",
+    "contracts/application-system.json": "application-system.schema.json",
     "contracts/implementation-map.json": "implementation-map.schema.json",
+    "contracts/implementation-plan.json": "implementation-plan.schema.json",
     "contracts/capture-profile.json": "capture-profile.schema.json",
     "contracts/diff-regions.json": "diff-regions.schema.json",
     "contracts/design-lock.json": "design-lock.schema.json",
@@ -363,6 +367,7 @@ def _managed_output_snapshot(output_root: Path) -> dict | None:
     lock = documents["contracts/design-lock.json"]
     manifest = documents["contracts/asset-manifest.json"]
     page_inventory = documents["contracts/page-inventory.json"]
+    reference_inventory = documents["contracts/reference-inventory.json"]
     if (
         lock["status"] != "generated"
         or lock["generatedAt"] != DETERMINISTIC_GENERATED_AT
@@ -390,12 +395,15 @@ def _managed_output_snapshot(output_root: Path) -> dict | None:
     ):
         return None
 
-    referenced_asset_ids = {
+    page_asset_ids = {
         asset_id
         for page in page_inventory["pages"]
         for asset_id in page["sourceAssetIds"]
     }
-    if referenced_asset_ids != set(asset_ids):
+    reference_asset_ids = {
+        reference["assetId"] for reference in reference_inventory["references"]
+    }
+    if not page_asset_ids.issubset(set(asset_ids)) or reference_asset_ids != set(asset_ids):
         return None
 
     expected_files = {
@@ -554,6 +562,8 @@ def _build_page_inventory(assets: list[dict]) -> dict:
             {
                 **identity,
                 "sourceAssetIds": [asset["assetId"]],
+                "referenceIds": [_numbered("REF", number)],
+                "microVisualFeatureIds": [],
                 "route": {
                     "path": None,
                     "evidenceLevel": "unknown",
@@ -622,6 +632,18 @@ def _build_ui_style_contract(global_gap_id: str) -> dict:
             "spacing": [],
             "radii": [],
             "shadows": [],
+            "borders": [],
+            "opacity": [],
+            "gradients": [],
+            "blur": [],
+            "materials": [],
+            "layers": [],
+            "motion": [],
+            "iconography": [],
+            "chartLanguage": [],
+            "density": [],
+            "backgrounds": [],
+            "forbiddenPatterns": [],
         },
         "responsiveVariants": [
             {
@@ -746,9 +768,135 @@ def _build_diff_regions(assets: list[dict]) -> dict:
                         "status": "not-run",
                     }
                 ],
+                "microVisualTargets": [],
             }
         )
     return {"schemaVersion": SCHEMA_VERSION, "pages": pages}
+
+
+def _build_reference_inventory(assets: list[dict]) -> dict:
+    references = []
+    for number, asset in enumerate(assets, start=1):
+        gap_id = _numbered("G", number)
+        references.append(
+            {
+                "referenceId": _numbered("REF", number),
+                "assetId": asset["assetId"],
+                "role": "unknown",
+                "scope": "unknown",
+                "authorityClass": "unknown",
+                "title": {
+                    "zh-CN": "待人工识别的参考图",
+                    "en-US": "Reference awaiting visual classification",
+                },
+                "appliesToPageIdentities": [_identity(number)],
+                "shellIds": [],
+                "componentIds": [],
+                "styleSections": [],
+                "extractedRuleIds": [],
+                "status": "proposed",
+                "evidenceLevel": "unknown",
+                "gapIds": [gap_id],
+            }
+        )
+    return {"schemaVersion": SCHEMA_VERSION, "references": references}
+
+
+def _build_application_system(assets: list[dict], global_gap_id: str) -> dict:
+    route_entries = []
+    for number, _asset in enumerate(assets, start=1):
+        gap_id = _numbered("G", number)
+        route_entries.append(
+            {
+                **_identity(number),
+                "path": None,
+                "shellId": None,
+                "navigationEntryId": None,
+                "status": "proposed",
+                "evidenceLevel": "unknown",
+                "gapIds": [gap_id],
+            }
+        )
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "applicationId": "ui-replica-application",
+        "integrationMode": "single-application",
+        "runtimeMode": "single-dev-server",
+        "portPolicy": "shared-port",
+        "port": None,
+        "router": None,
+        "defaultRoute": None,
+        "routeEntries": route_entries,
+        "shellFamilies": [],
+        "navigation": {"status": "unknown"},
+        "sharedState": {"status": "unknown"},
+        "sharedComponents": [],
+        "implementationSequence": [
+            "freeze-design-language-and-reference-authority",
+            "implement-tokens-shell-and-shared-components",
+            "implement-and-accept-pages-in-order",
+            "verify-integrated-routing-and-navigation",
+        ],
+        "status": "proposed",
+        "evidenceLevel": "approved",
+        "gapIds": [global_gap_id],
+    }
+
+
+def _build_implementation_plan(assets: list[dict]) -> dict:
+    page_items = []
+    for number, _asset in enumerate(assets, start=1):
+        gap_id = _numbered("G", number)
+        page_items.append(
+            {
+                "workItemId": _numbered("WI", number),
+                "order": number,
+                **_identity(number),
+                "dependencies": ["foundation"],
+                "route": None,
+                "shellId": None,
+                "requiredReferenceIds": [_numbered("REF", number)],
+                "requiredMicroVisualFeatureIds": [],
+                "gates": {
+                    "contractComplete": "not-run",
+                    "structural": "not-run",
+                    "visual": "not-run",
+                    "interaction": "not-run",
+                    "integratedNavigation": "not-run",
+                },
+                "status": "blocked",
+                "gapIds": [gap_id],
+            }
+        )
+    phases = [
+        {
+            "phaseId": "foundation",
+            "order": 1,
+            "name": {"zh-CN": "共享视觉基础", "en-US": "Shared visual foundation"},
+            "deliverables": ["reference authority", "UI design language", "tokens", "shells", "shared components"],
+            "exitGate": ["design-language scope frozen", "shared contracts approved"],
+        },
+        {
+            "phaseId": "pages",
+            "order": 2,
+            "name": {"zh-CN": "逐页复刻", "en-US": "Page-by-page replication"},
+            "deliverables": ["page contracts", "micro visual contracts", "routed page implementations"],
+            "exitGate": ["each page passes five gates before acceptance"],
+        },
+        {
+            "phaseId": "integration",
+            "order": 3,
+            "name": {"zh-CN": "系统集成", "en-US": "System integration"},
+            "deliverables": ["single application", "shared port", "router", "navigation", "cross-page consistency"],
+            "exitGate": ["all approved routes reachable in one application"],
+        },
+    ]
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "strategy": "foundation-then-page-by-page-in-one-application",
+        "phases": phases,
+        "pageWorkItems": page_items,
+    }
 
 
 def _json_bytes(document: dict) -> bytes:
@@ -836,6 +984,16 @@ def _page_doc_values(number: int, asset: dict, locale: str) -> dict[str, str]:
         qa_text = (
             f"视觉、结构与交互 QA 均为 `not-run`。完成前必须解决或批准缺口 `{gap_id}`。"
         )
+        micro_text = (
+            f"尚未自动测量微视觉特征。人工检查 `{_numbered('REF', number)}` 后，必须登记图标/Logo、"
+            "边框、圆角、阴影、透明度、曲线控制点、圆环、圆柱、渐变、裁切与层级，并建立特征级 Diff；"
+            f"当前关联缺口 `{gap_id}`。"
+        )
+        integration_text = (
+            "本页必须作为统一 Router 下的一个路由，在同一应用、同一开发服务器和共享端口中实现；"
+            "复用已冻结的设计语言、Shell 与组件，不得创建独立页面服务器。路由、导航入口和 Shell "
+            f"尚未确认（`{gap_id}`）。"
+        )
     else:
         identity_text = (
             f"- Identity: `{identity}`\n"
@@ -864,6 +1022,16 @@ def _page_doc_values(number: int, asset: dict, locale: str) -> dict[str, str]:
             f"Visual, structural, and interaction QA are `not-run`. Gap `{gap_id}` "
             "must be resolved or approved before completion."
         )
+        micro_text = (
+            f"Micro features are not auto-measured. After inspecting `{_numbered('REF', number)}`, "
+            "contract icons/Logo, borders, radii, shadows, opacity, curve control points, rings, cylinders, "
+            f"gradients, clipping, and layering with feature-level Diff targets; gap `{gap_id}` remains."
+        )
+        integration_text = (
+            "Implement this page as one route under the unified Router in the same application, development "
+            "server, and shared port. Reuse the frozen design language, shell, and components; do not create "
+            f"a standalone page server. Route, navigation entry, and shell remain unresolved (`{gap_id}`)."
+        )
     qa_text += f"\nQA IDs: {qa_ids}"
     return {
         "pageId": f"P{number:03d}",
@@ -873,6 +1041,8 @@ def _page_doc_values(number: int, asset: dict, locale: str) -> dict[str, str]:
         "canvasShellAndRegions": canvas_text,
         "layoutCopyIconsAndData": content_text,
         "componentsInteractionsAndResponsive": behavior_text,
+        "microVisualContract": micro_text,
+        "applicationIntegration": integration_text,
         "qaAndGaps": qa_text,
     }
 
@@ -887,6 +1057,7 @@ def _build_markdown_documents(
             "catalog": "设计稿总目录.md",
             "guide": "UI实施说明.md",
             "components": "组件规范.md",
+            "design_language": "UI设计语言.md",
             "template_directory": "zh",
         },
         "en-US": {
@@ -894,6 +1065,7 @@ def _build_markdown_documents(
             "catalog": "Design-Catalog.md",
             "guide": "UI-Implementation-Guide.md",
             "components": "Component-Specification.md",
+            "design_language": "UI-Design-Language.md",
             "template_directory": "en",
         },
     }
@@ -945,6 +1117,29 @@ def _build_markdown_documents(
                 "componentRegistry": registry,
                 "styleTokens": styles,
                 "componentStatesAndVariants": states,
+            },
+        )
+        if locale == "zh-CN":
+            reference_authority = (
+                "初始骨架为每个资产分配 `REF###`，但不会根据像素自动判断它是页面图、设计语言图、"
+                "组件板、品牌板、状态板还是装饰背景。视觉检查后先完成角色、作用域与权威分类。"
+            )
+            style_contract = "样式合同初始为空并关联全局缺口；必须从权威设计语言参考图和重复页面证据中测量。"
+            micro_contract = "微视觉合同初始为空；逐页测量后按特征登记并连接到 Diff 目标。"
+        else:
+            reference_authority = (
+                "The skeleton assigns each asset a `REF###` but does not infer whether it is a page, design-language "
+                "board, component board, brand board, state board, or decorative background. Classify role, scope, "
+                "and authority before page freezing."
+            )
+            style_contract = "The initial style contract is empty and gap-linked; measure it from authoritative design-language references and repeated page evidence."
+            micro_contract = "The initial micro-visual contract is empty; measure page features and link each one to a Diff target."
+        documents[f"{docs_root}/{details['design_language']}"] = _render_template(
+            f"{template_root}/ui-design-language.template.md",
+            {
+                "referenceAuthority": reference_authority,
+                "styleContract": style_contract,
+                "microVisualContract": micro_contract,
             },
         )
         for number, asset in enumerate(assets, start=1):
@@ -1104,9 +1299,15 @@ def _build_generated_files(
                 "assets": assets,
             }
         ),
+        "contracts/reference-inventory.json": _json_bytes(
+            _build_reference_inventory(assets)
+        ),
         "contracts/page-inventory.json": _json_bytes(_build_page_inventory(assets)),
         "contracts/ui-style-contract.json": _json_bytes(
             _build_ui_style_contract(global_gap_id)
+        ),
+        "contracts/micro-visual-contract.json": _json_bytes(
+            {"schemaVersion": SCHEMA_VERSION, "features": []}
         ),
         "contracts/component-registry.json": _json_bytes(
             {
@@ -1118,6 +1319,12 @@ def _build_generated_files(
         ),
         "contracts/implementation-map.json": _json_bytes(
             _build_implementation_map(assets)
+        ),
+        "contracts/application-system.json": _json_bytes(
+            _build_application_system(assets, global_gap_id)
+        ),
+        "contracts/implementation-plan.json": _json_bytes(
+            _build_implementation_plan(assets)
         ),
         "contracts/capture-profile.json": _json_bytes(
             _build_capture_profiles(assets)

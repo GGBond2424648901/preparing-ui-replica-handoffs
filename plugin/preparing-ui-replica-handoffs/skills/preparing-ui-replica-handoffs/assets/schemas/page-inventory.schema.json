@@ -53,6 +53,8 @@
         "stateId",
         "variantId",
         "sourceAssetIds",
+        "referenceIds",
+        "microVisualFeatureIds",
         "route",
         "canvas",
         "shell",
@@ -77,6 +79,17 @@
           "type": "array",
           "items": { "type": "string", "pattern": "^A[0-9]{3,}$" },
           "minItems": 1,
+          "uniqueItems": true
+        },
+        "referenceIds": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^REF[0-9]{3,}$" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "microVisualFeatureIds": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^MV[0-9]{3,}$" },
           "uniqueItems": true
         },
         "route": {

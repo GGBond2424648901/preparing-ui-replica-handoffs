@@ -127,3 +127,15 @@ Accept desktop behavior separately at the original baseline, a wide viewport, a 
 ruleId: QG-024
 
 Scroll acceptance verifies one primary vertical scroll chain plus the necessity, axes, boundaries, wheel handoff, and complete reachability of every dedicated scroll surface. Unjustified nested vertical scrolling, trapped wheel input, sticky-boundary drift, fixed regions covering content, or unbounded wide-screen stretching fails.
+
+sectionId: micro-visual-acceptance
+
+## Micro-visual and Integration Acceptance
+
+ruleId: QG-025
+
+Compare every `MV###` in reference/current/overlay/diff modes at the native baseline profile, checking geometry, stroke, color, opacity, clipping, and stacking tolerances. A whole-page pixel comparison cannot replace feature-level checks for curve control points, ring/cylinder proportions, Logo clear space, or icon stroke.
+
+ruleId: QG-026
+
+Page acceptance also proves that the route/navigation reaches it in the unified application on the shared port, that it reuses the correct shell/tokens/components, and that it does not regress accepted pages. A passing isolated screenshot with failing integrated navigation cannot mark the page accepted.

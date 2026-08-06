@@ -57,6 +57,9 @@
         "status",
         "evidenceLevel",
         "sourcePageIdentities",
+        "sourceReferenceIds",
+        "renderingStrategy",
+        "assetRefs",
         "anatomy",
         "sizing",
         "variants",
@@ -75,6 +78,20 @@
           "type": "array",
           "items": { "$ref": "#/$defs/identity" },
           "minItems": 1
+        },
+        "sourceReferenceIds": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^REF[0-9]{3,}$" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "renderingStrategy": {
+          "enum": ["dom", "css", "svg", "canvas", "raster", "library-icon", "hybrid", "unknown"]
+        },
+        "assetRefs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
         },
         "anatomy": {
           "type": "array",

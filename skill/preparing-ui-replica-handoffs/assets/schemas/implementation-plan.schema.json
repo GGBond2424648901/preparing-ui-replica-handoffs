@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Page-by-page UI replica implementation plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "strategy", "phases", "pageWorkItems"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "strategy": { "const": "foundation-then-page-by-page-in-one-application" },
+    "phases": { "type": "array", "items": { "$ref": "#/$defs/phase" }, "minItems": 3 },
+    "pageWorkItems": { "type": "array", "items": { "$ref": "#/$defs/workItem" }, "minItems": 1 }
+  },
+  "$defs": {
+    "phase": {
+      "type": "object", "additionalProperties": false,
+      "required": ["phaseId", "order", "name", "deliverables", "exitGate"],
+      "properties": {
+        "phaseId": { "type": "string", "minLength": 1 }, "order": { "type": "integer", "minimum": 1 },
+        "name": { "type": "object" }, "deliverables": { "type": "array", "items": { "type": "string" } },
+        "exitGate": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "workItem": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "workItemId", "order", "pageId", "stateId", "variantId", "dependencies",
+        "route", "shellId", "requiredReferenceIds", "requiredMicroVisualFeatureIds",
+        "gates", "status", "gapIds"
+      ],
+      "properties": {
+        "workItemId": { "type": "string", "pattern": "^WI[0-9]{3,}$" },
+        "order": { "type": "integer", "minimum": 1 },
+        "pageId": { "type": "string", "pattern": "^P[0-9]{3,}$" },
+        "stateId": { "type": "string", "pattern": "^S[0-9]{2,}$" },
+        "variantId": { "type": "string", "pattern": "^V[0-9]{2,}$" },
+        "dependencies": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "route": { "type": ["string", "null"] }, "shellId": { "type": ["string", "null"] },
+        "requiredReferenceIds": { "type": "array", "items": { "type": "string", "pattern": "^REF[0-9]{3,}$" }, "uniqueItems": true },
+        "requiredMicroVisualFeatureIds": { "type": "array", "items": { "type": "string", "pattern": "^MV[0-9]{3,}$" }, "uniqueItems": true },
+        "gates": {
+          "type": "object", "additionalProperties": false,
+          "required": ["contractComplete", "structural", "visual", "interaction", "integratedNavigation"],
+          "properties": {
+            "contractComplete": { "enum": ["not-run", "pass", "fail", "blocked"] },
+            "structural": { "enum": ["not-run", "pass", "fail", "blocked"] },
+            "visual": { "enum": ["not-run", "pass", "fail", "blocked"] },
+            "interaction": { "enum": ["not-run", "pass", "fail", "blocked"] },
+            "integratedNavigation": { "enum": ["not-run", "pass", "fail", "blocked"] }
+          }
+        },
+        "status": { "enum": ["blocked", "ready", "in-progress", "accepted"] },
+        "gapIds": { "type": "array", "items": { "type": "string", "pattern": "^G[0-9]{3,}$" }, "uniqueItems": true }
+      }
+    }
+  }
+}

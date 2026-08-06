@@ -17,6 +17,20 @@ sectionId: implementation-flow
 
 使用 `{{implementationMapPath}}` 获取页面、区域、组件、数据、交互、响应式与 Git 范围映射。
 
+先冻结全局 UI 设计语言、Token、Shell、Logo/图标策略和共享组件，再按 `implementation-plan.json` 的顺序逐页实现。每页必须依次通过合同完整性、结构、视觉、交互和集成导航门禁，才进入下一页；最终所有路由在同一个应用、同一个开发服务器和共享端口中展示，禁止为每页创建独立端口或孤立 Demo。
+
+sectionId: reference-classification
+
+## 参考图分类与设计语言继承
+
+先读取 `../../contracts/reference-inventory.json` 和 `UI设计语言.md`。全局设计语言图、组件板、品牌板、状态板与页面图分别取证；页面先继承适用的共享规则，再叠加该页直接证据。冲突时页面专属设计和用户修正优先，并记录胜出证据，不能静默覆盖。
+
+sectionId: visual-assets
+
+## SVG、CSS、Canvas 与装饰背景
+
+Logo/专有图形优先 SVG，通用图标使用锁定图标库，简单几何与材质使用 CSS，精确曲线/圆环/图表优先 SVG，高密度动态图形可用 Canvas，环境装饰可用本地光栅图。登录页等允许一张完整装饰背景加真实 DOM UI；含文字、控件、数据或状态的整页截图不能充当实现。
+
 sectionId: canvas-and-overflow
 
 ## 画布扩展与滚动

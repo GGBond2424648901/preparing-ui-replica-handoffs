@@ -29,6 +29,18 @@ sectionId: components-interactions-responsive
 
 {{componentsInteractionsAndResponsive}}
 
+sectionId: micro-visual-contract
+
+## 微视觉合同
+
+{{microVisualContract}}
+
+sectionId: application-integration
+
+## 单应用集成
+
+{{applicationIntegration}}
+
 sectionId: qa-and-gaps
 
 ## QA 与缺口

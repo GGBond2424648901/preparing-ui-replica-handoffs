@@ -17,6 +17,20 @@ sectionId: implementation-flow
 
 Use `{{implementationMapPath}}` for page, region, component, data, interaction, responsive, and Git-scope mappings.
 
+Freeze the global UI design language, tokens, shell, Logo/icon strategy, and shared components first, then implement pages in `implementation-plan.json` order. Each page passes contract-completeness, structural, visual, interaction, and integrated-navigation gates before the next page begins. All routes finish in one application on one development server and shared port; do not create per-page ports or isolated demos.
+
+sectionId: reference-classification
+
+## Reference Classification and Design-language Inheritance
+
+Read `../../contracts/reference-inventory.json` and `UI-Design-Language.md` first. Gather evidence separately from global design-language boards, component boards, brand boards, state boards, and page references. A page inherits applicable shared rules, then applies page-direct evidence. Page-specific designs and user corrections win conflicts, with the winning evidence recorded rather than silently overriding rules.
+
+sectionId: visual-assets
+
+## SVG, CSS, Canvas, and Decorative Backgrounds
+
+Prefer SVG for Logos/proprietary marks, a locked icon library for standard icons, CSS for simple geometry and materials, SVG for precise curves/rings/charts, Canvas for high-density dynamic graphics, and local raster assets for ambient decoration. A login page may use one full decorative background plus real DOM UI; a screenshot containing copy, controls, data, or state cannot be the implementation.
+
 sectionId: canvas-and-overflow
 
 ## Canvas Expansion and Scrolling

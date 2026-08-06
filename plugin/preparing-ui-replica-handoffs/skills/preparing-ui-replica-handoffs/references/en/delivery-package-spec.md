@@ -10,7 +10,7 @@ The standard root contains `README.md`, `assets/designs/<design-version>/`, `doc
 
 ruleId: DP-002
 
-Chinese documents include at least `设计稿总目录.md`, `UI实施说明.md`, `组件规范.md`, and `pages/<page-state-variant>.md`; English mirrors are `Design-Catalog.md`, `UI-Implementation-Guide.md`, `Component-Specification.md`, and same-ID page documents.
+Chinese documents include at least `设计稿总目录.md`, `UI设计语言.md`, `UI实施说明.md`, `组件规范.md`, and `pages/<page-state-variant>.md`; English mirrors are `Design-Catalog.md`, `UI-Design-Language.md`, `UI-Implementation-Guide.md`, `Component-Specification.md`, and same-ID page documents.
 
 sectionId: catalog
 
@@ -46,7 +46,7 @@ sectionId: contracts
 
 ruleId: DP-007
 
-`contracts/` contains the requirement ledger, gap register, asset manifest, page inventory, UI style contract, component registry, implementation map, capture profile, diff regions, visual QA matrix, and design lock. Stable keys are English; readable fields expose `zh-CN`/`en-US`.
+`contracts/` contains the requirement ledger, gap register, asset manifest, reference inventory, page inventory, UI style contract, micro visual contract, component registry, application system, implementation map, implementation plan, capture profile, diff regions, visual QA matrix, and design lock. Stable keys are English; readable fields expose `zh-CN`/`en-US`.
 
 ruleId: DP-008
 
@@ -123,3 +123,27 @@ sectionId: desktop-web-profile
 ruleId: DP-021
 
 Configuration, page contracts, component registry, implementation map, and QA profiles declare target platform and layout policy consistently. Default delivery values are `desktop-web` and `desktop-hybrid-elastic`; every region also records a desktop role and narrow-desktop behavior. Mobile Web or native desktop uses a separate platform value and variant instead of silently inheriting the desktop-Web contract.
+
+sectionId: reference-authority
+
+## Reference Roles and Design Language
+
+ruleId: DP-022
+
+Give every input asset a stable `REF###`, then classify it as page reference, UI design-language reference, component board, brand board, interaction-state board, motion reference, decorative background, content asset, or unknown. A non-page reference cannot freeze as a product page. If the skeleton provisionally lists it as a page candidate, enrichment must reclassify and remove that candidate while preserving aliases and source mappings.
+
+ruleId: DP-023
+
+`UI-Design-Language.md` is shared visual authority, not a page catalog. It records principles, layers/materials, tokens, shell, components, Logo/icons, charts, micro visuals, background strategy, motion/states, scope, exceptions, and conflicts, cross-referencing `reference-inventory.json`, `ui-style-contract.json`, and `micro-visual-contract.json`.
+
+sectionId: integrated-application
+
+## Single-application Page-by-page Delivery
+
+ruleId: DP-024
+
+`application-system.json` defines one software system, one application entry, one development server/shared port, a unified Router, shell families, navigation, and shared state. Integrate all pages through routes instead of defaulting to separate projects, ports, or isolated demos. A microfrontend exception requires user approval.
+
+ruleId: DP-025
+
+`implementation-plan.json` follows global design language/tokens/shell/shared components → page-by-page implementation → system integration. Accept a page only after contract-completeness, structural, visual, interaction, and integrated-navigation gates pass, including its micro-visual features.

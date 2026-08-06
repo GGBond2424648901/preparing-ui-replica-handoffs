@@ -26,10 +26,14 @@ SKILL_ROOT = SCRIPT_ROOT.parent
 SCHEMA_ROOT = SKILL_ROOT / "assets" / "schemas"
 SCHEMA_CONTRACTS = {
     "contracts/asset-manifest.json": "asset-manifest.schema.json",
+    "contracts/reference-inventory.json": "reference-inventory.schema.json",
     "contracts/page-inventory.json": "page-inventory.schema.json",
     "contracts/ui-style-contract.json": "ui-style-contract.schema.json",
+    "contracts/micro-visual-contract.json": "micro-visual-contract.schema.json",
     "contracts/component-registry.json": "component-registry.schema.json",
+    "contracts/application-system.json": "application-system.schema.json",
     "contracts/implementation-map.json": "implementation-map.schema.json",
+    "contracts/implementation-plan.json": "implementation-plan.schema.json",
     "contracts/capture-profile.json": "capture-profile.schema.json",
     "contracts/diff-regions.json": "diff-regions.schema.json",
     "contracts/design-lock.json": "design-lock.schema.json",
@@ -88,9 +92,11 @@ REQUIRED_FILES = tuple(
             *SCHEMA_CONTRACTS,
             *CSV_FIELDS,
             "docs/zh/设计稿总目录.md",
+            "docs/zh/UI设计语言.md",
             "docs/zh/UI实施说明.md",
             "docs/zh/组件规范.md",
             "docs/en/Design-Catalog.md",
+            "docs/en/UI-Design-Language.md",
             "docs/en/UI-Implementation-Guide.md",
             "docs/en/Component-Specification.md",
             "reports/contact-sheet.png",
@@ -106,6 +112,8 @@ PAGE_SECTION_IDS = frozenset(
         "canvas-shell-regions",
         "layout-copy-icons-data",
         "components-interactions-responsive",
+        "micro-visual-contract",
+        "application-integration",
         "qa-and-gaps",
     }
 )
@@ -115,6 +123,7 @@ PAGE_SECTION_CONTRACT_FIELDS = {
         "stateId",
         "variantId",
         "sourceAssetIds",
+        "referenceIds",
         "route",
         "evidenceLevel",
         "status",
@@ -126,6 +135,8 @@ PAGE_SECTION_CONTRACT_FIELDS = {
         "interactions",
         "responsiveVariants",
     ),
+    "micro-visual-contract": ("referenceIds", "microVisualFeatureIds"),
+    "application-integration": ("route", "shell", "components"),
     "qa-and-gaps": ("acceptanceCriteria", "gapIds"),
 }
 SUPPORTED_IMAGE_SUFFIXES = frozenset({".gif", ".jpeg", ".jpg", ".png", ".webp"})

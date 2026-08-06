@@ -1,4 +1,4 @@
 interface:
   display_name: "UI 复刻交付准备 / UI Replica Handoff Prep"
-  short_description: "桌面 Web 优先的中英双语 UI 复刻交付 / Desktop-Web-first bilingual UI handoff"
-  default_prompt: "Use $preparing-ui-replica-handoffs to prepare a bilingual, evidence-bounded, desktop-Web-first UI replica handoff package with mixed fixed, fluid, bounded, and scrollable layout contracts from these design images."
+  short_description: "设计语言+逐页微视觉的中英双语 UI 复刻交付 / Bilingual design-language and micro-visual handoff"
+  default_prompt: "Use $preparing-ui-replica-handoffs to classify page and authoritative UI design-language images, then prepare a bilingual, desktop-Web-first handoff with global design-language, per-page micro-visual, mixed-layout, and single-application route contracts."

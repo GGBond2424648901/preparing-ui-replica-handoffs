@@ -10,7 +10,7 @@ ruleId: DP-001
 
 ruleId: DP-002
 
-中文文档至少包含 `设计稿总目录.md`、`UI实施说明.md`、`组件规范.md` 与 `pages/<page-state-variant>.md`；英文镜像为 `Design-Catalog.md`、`UI-Implementation-Guide.md`、`Component-Specification.md` 和同 ID pages 文档。
+中文文档至少包含 `设计稿总目录.md`、`UI设计语言.md`、`UI实施说明.md`、`组件规范.md` 与 `pages/<page-state-variant>.md`；英文镜像为 `Design-Catalog.md`、`UI-Design-Language.md`、`UI-Implementation-Guide.md`、`Component-Specification.md` 和同 ID pages 文档。
 
 sectionId: catalog
 
@@ -46,7 +46,7 @@ sectionId: contracts
 
 ruleId: DP-007
 
-`contracts/` 必须包含 requirement ledger、gap register、asset manifest、page inventory、UI style contract、component registry、implementation map、capture profile、diff regions、visual QA matrix 和 design lock。稳定键名使用英文，可读字段提供 `zh-CN`/`en-US`。
+`contracts/` 必须包含 requirement ledger、gap register、asset manifest、reference inventory、page inventory、UI style contract、micro visual contract、component registry、application system、implementation map、implementation plan、capture profile、diff regions、visual QA matrix 和 design lock。稳定键名使用英文，可读字段提供 `zh-CN`/`en-US`。
 
 ruleId: DP-008
 
@@ -123,3 +123,27 @@ sectionId: desktop-web-profile
 ruleId: DP-021
 
 配置、逐页合同、组件注册表、实施映射和 QA profile 必须共同声明目标平台与布局策略。默认交付值为 `desktop-web` 与 `desktop-hybrid-elastic`；每个区域还要记录桌面角色和窄桌面行为。移动端或原生桌面端必须使用独立平台值和变体，不能静默继承桌面 Web 合同。
+
+sectionId: reference-authority
+
+## 参考资料角色与设计语言
+
+ruleId: DP-022
+
+每个输入资产必须先获得稳定 `REF###`，并分类为页面图、UI 设计语言图、组件板、品牌板、交互状态板、动效参考、装饰背景、内容资产或 unknown。非页面参考不得冻结为业务页面；若初始骨架暂列为页面候选，富化阶段必须先重分类、移除候选页面并保留别名与来源映射。
+
+ruleId: DP-023
+
+`UI设计语言.md` 是共享视觉权威，不是页面目录。它必须逐条记录设计原则、层次/材质、Token、Shell、组件、Logo/图标、图表、微视觉、背景策略、动效/状态、适用范围、例外和冲突，并与 `reference-inventory.json`、`ui-style-contract.json` 和 `micro-visual-contract.json` 互相引用。
+
+sectionId: integrated-application
+
+## 单应用逐页实施
+
+ruleId: DP-024
+
+`application-system.json` 必须定义一个软件系统、一个应用入口、一个开发服务器/共享端口、统一 Router、Shell 家族、导航与共享状态。所有页面通过路由集成展示，不得默认为每页创建单独工程、端口或孤立 Demo；微前端例外必须有用户批准。
+
+ruleId: DP-025
+
+`implementation-plan.json` 按“全局设计语言/Token/Shell/共享组件 → 页面逐页实现 → 系统集成”的顺序组织。每页只有通过合同完整性、结构、视觉、交互和集成导航门禁后才能验收，微视觉特征必须进入该页验收。

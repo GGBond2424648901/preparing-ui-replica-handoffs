@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Single application UI system contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "applicationId", "integrationMode", "runtimeMode", "portPolicy",
+    "port", "router", "defaultRoute", "routeEntries", "shellFamilies", "navigation",
+    "sharedState", "sharedComponents", "implementationSequence", "status", "evidenceLevel", "gapIds"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "applicationId": { "type": "string", "minLength": 1 },
+    "integrationMode": { "const": "single-application" },
+    "runtimeMode": { "const": "single-dev-server" },
+    "portPolicy": { "const": "shared-port" },
+    "port": { "type": ["integer", "null"], "minimum": 1, "maximum": 65535 },
+    "router": { "type": ["string", "null"] },
+    "defaultRoute": { "type": ["string", "null"] },
+    "routeEntries": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["pageId", "stateId", "variantId", "path", "shellId", "navigationEntryId", "status", "evidenceLevel", "gapIds"],
+        "properties": {
+          "pageId": { "type": "string", "pattern": "^P[0-9]{3,}$" },
+          "stateId": { "type": "string", "pattern": "^S[0-9]{2,}$" },
+          "variantId": { "type": "string", "pattern": "^V[0-9]{2,}$" },
+          "path": { "type": ["string", "null"] }, "shellId": { "type": ["string", "null"] },
+          "navigationEntryId": { "type": ["string", "null"] },
+          "status": { "enum": ["unknown", "proposed", "candidate", "approved"] },
+          "evidenceLevel": { "enum": ["direct", "derived", "candidate", "approved", "unknown"] },
+          "gapIds": { "$ref": "#/$defs/gapIds" }
+        }
+      }
+    },
+    "shellFamilies": { "type": "array", "items": { "type": "object" } },
+    "navigation": { "type": "object" },
+    "sharedState": { "type": "object" },
+    "sharedComponents": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "implementationSequence": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "status": { "enum": ["unknown", "proposed", "candidate", "approved"] },
+    "evidenceLevel": { "enum": ["direct", "derived", "candidate", "approved", "unknown"] },
+    "gapIds": { "$ref": "#/$defs/gapIds" }
+  },
+  "$defs": {
+    "gapIds": { "type": "array", "items": { "type": "string", "pattern": "^G[0-9]{3,}$" }, "uniqueItems": true }
+  }
+}

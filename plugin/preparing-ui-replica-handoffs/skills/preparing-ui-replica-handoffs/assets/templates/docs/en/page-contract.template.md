@@ -29,6 +29,18 @@ sectionId: components-interactions-responsive
 
 {{componentsInteractionsAndResponsive}}
 
+sectionId: micro-visual-contract
+
+## Micro-visual Contract
+
+{{microVisualContract}}
+
+sectionId: application-integration
+
+## Single-application Integration
+
+{{applicationIntegration}}
+
 sectionId: qa-and-gaps
 
 ## QA and Gaps

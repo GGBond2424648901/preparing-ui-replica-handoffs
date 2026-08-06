@@ -18,13 +18,29 @@
     "tokens": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["colors", "typography", "spacing", "radii", "shadows"],
+      "required": [
+        "colors", "typography", "spacing", "radii", "shadows", "borders",
+        "opacity", "gradients", "blur", "materials", "layers", "motion",
+        "iconography", "chartLanguage", "density", "backgrounds", "forbiddenPatterns"
+      ],
       "properties": {
         "colors": { "$ref": "#/$defs/tokenList" },
         "typography": { "$ref": "#/$defs/tokenList" },
         "spacing": { "$ref": "#/$defs/tokenList" },
         "radii": { "$ref": "#/$defs/tokenList" },
-        "shadows": { "$ref": "#/$defs/tokenList" }
+        "shadows": { "$ref": "#/$defs/tokenList" },
+        "borders": { "$ref": "#/$defs/tokenList" },
+        "opacity": { "$ref": "#/$defs/tokenList" },
+        "gradients": { "$ref": "#/$defs/tokenList" },
+        "blur": { "$ref": "#/$defs/tokenList" },
+        "materials": { "$ref": "#/$defs/tokenList" },
+        "layers": { "$ref": "#/$defs/tokenList" },
+        "motion": { "$ref": "#/$defs/tokenList" },
+        "iconography": { "$ref": "#/$defs/tokenList" },
+        "chartLanguage": { "$ref": "#/$defs/tokenList" },
+        "density": { "$ref": "#/$defs/tokenList" },
+        "backgrounds": { "$ref": "#/$defs/tokenList" },
+        "forbiddenPatterns": { "$ref": "#/$defs/tokenList" }
       }
     },
     "responsiveVariants": {

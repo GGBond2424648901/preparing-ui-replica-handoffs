@@ -74,7 +74,11 @@ Use this priority: formal asset > confirmed exact icon-library name > approved c
 
 ruleId: CS-013
 
-Images, avatars, illustrations, chart textures, and file thumbnails use package-relative paths with hashes. Reject absolute paths, remote hotlinks, and full-page screenshots used as implementation backgrounds.
+Images, avatars, illustrations, chart textures, and file thumbnails use package-relative paths with hashes. Prefer SVG for formal Logos/proprietary marks, a version/name-locked icon library for standard icons, CSS for simple geometry/materials, SVG for precise curves/rings/chart marks, Canvas for high-density dynamic graphics, and local raster assets for ambient illustration. Reject absolute paths, remote hotlinks, Emoji, and font-character icon substitutes.
+
+ruleId: CS-013A
+
+A login, Hero, or ambient scene may use one full-canvas decorative background with real DOM Logo, headings, form, buttons, errors, dynamic data, and interactions over it. Record source/generated status, native dimensions, aspect ratio, fit, focal point, safe area, crop, and responsive variants. A full-page screenshot containing controls, copy, data, or states cannot implement interactive UI; use decorative backgrounds locally on ordinary product pages only when evidenced.
 
 sectionId: accessibility
 
@@ -111,3 +115,27 @@ Assign every shell, region, and component a desktop role: `fixed-shell`, `flexib
 ruleId: CS-019
 
 A desktop page has one primary vertical scroll chain by default. Region scrolling is reserved for fixed-height or two-dimensional/continuous functional surfaces and records axis, boundary, chaining, wheel handoff, and reachability. On wide screens, bounded columns, maximum line length, and component caps prevent over-stretching. On narrow desktop screens, prefer scrolling after minimum dimensions; broad reflow requires an approved variant.
+
+sectionId: design-language-authority
+
+## Authoritative UI Design-language References
+
+ruleId: CS-020
+
+Classify inputs as page references, UI design-language overviews, component boards, brand boards, interaction-state boards, motion references, or decorative backgrounds before page inventory. Put principles, materials, tokens, shell, iconography, charts, motion, and forbidden patterns from design-language references into dedicated `UI-Design-Language.md` and `reference-inventory.json` records instead of losing their global authority among pages.
+
+ruleId: CS-021
+
+Every shared design-language rule records its source `referenceId`, crop/coordinates, scope, exceptions, evidence level, and affected pages/components. A page inherits applicable rules and then adds page-direct evidence. User corrections and page-specific designs outrank shared rules; log every conflict.
+
+sectionId: micro-visual-contract
+
+## Micro-visual Contract
+
+ruleId: CS-022
+
+For every page, contract visible icon size/stroke, Logo proportion/clear space, device/cylinder proportions, curve control points, ring outer/inner diameter and angles, borders, per-corner radii, shadows, opacity, gradient stops, blur, clipping, masks, layering, and overflow in `micro-visual-contract.json`; “roughly similar” is insufficient.
+
+ruleId: CS-023
+
+Bind each micro feature to page, region, source `referenceId`, bounds, rendering strategy, responsive behavior, and geometry/color/opacity tolerances, then add a feature-level reference/current/overlay/diff target to `diff-regions.json`.

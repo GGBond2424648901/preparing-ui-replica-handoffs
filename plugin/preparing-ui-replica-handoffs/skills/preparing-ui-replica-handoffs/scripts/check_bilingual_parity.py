@@ -19,6 +19,8 @@ WINDOWS_ABSOLUTE_PATTERN = re.compile(r"^[A-Za-z]:[\\/]|^\\\\")
 HANDOFF_DOCUMENT_KEYS = {
     "设计稿总目录.md": "handoff:design-catalog",
     "Design-Catalog.md": "handoff:design-catalog",
+    "UI设计语言.md": "handoff:ui-design-language",
+    "UI-Design-Language.md": "handoff:ui-design-language",
     "UI实施说明.md": "handoff:ui-implementation-guide",
     "UI-Implementation-Guide.md": "handoff:ui-implementation-guide",
     "组件规范.md": "handoff:component-specification",

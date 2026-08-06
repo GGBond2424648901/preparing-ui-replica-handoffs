@@ -23,6 +23,18 @@ sectionId: states-and-variants
 
 {{componentStatesAndVariants}}
 
+sectionId: rendering-strategy
+
+## Rendering and Asset Strategy
+
+Record `renderingStrategy` and asset references for each component: DOM for real content/controls, local SVG for formal Logos/proprietary marks, a locked icon library for standard icons, CSS for simple geometry/materials, SVG for precise curves/rings/charts, Canvas for high-density dynamic graphics, and local raster assets for ambient decoration. A login page may layer DOM interaction over a purely decorative full image; screenshot UI is forbidden.
+
+sectionId: micro-visual-reuse
+
+## Micro-visual Reuse
+
+Shared components still contract icon stroke, borders, radii, shadows, opacity, gradients, clipping, and stacking; page exceptions remain local overrides. Link each reuse decision to design-language `referenceId`s, page evidence, and micro-visual feature IDs.
+
 sectionId: elastic-sizing
 
 ## Elastic Sizing
