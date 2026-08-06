@@ -86,4 +86,8 @@ The following pair is an early GPT-5.6 Luna Max example created before the curre
 
 当前版本为 `1.0.0+codex.20260806040539`。完整测试套件为 192/192 通过。公开发行版使用语义版本标签 `v1.0.0`。
 
-本仓库暂未附带开源许可证；在许可证明确前，请不要默认获得复制、修改或再分发授权。
+## 开源许可证 / License
+
+本项目采用 [MIT License](LICENSE) 开源。允许使用、复制、修改和再分发，但必须保留原始版权与许可声明。
+
+This project is licensed under the [MIT License](LICENSE).
