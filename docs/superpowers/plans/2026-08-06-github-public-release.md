@@ -236,4 +236,3 @@ git status --short
 ```
 
 Expected: repository is public with default `main`; release is public, final, targets `main`, and includes the ZIP; protection matches the policy; only `skill/preparing-ui-replica-handoffs.zip` remains untracked.
-
