@@ -1,6 +1,6 @@
 # preparing-ui-replica-handoffs
 
-我自己制作的 Codex Skill：把设计稿图片、UI 设计语言图、组件板、品牌板、状态图和动效参考，整理成可供下游 UI Agent 使用的中英双语 UI 复刻交付包。
+Codex Skill：把设计稿图片、UI 设计语言图、组件板、品牌板、状态图和动效参考，整理成可供下游 UI Agent 使用的中英双语 UI 复刻交付包。
 
 An evidence-driven, bilingual Codex Skill that turns UI screenshots, design-language boards, component and brand boards, state references, and motion references into precise handoff contracts for downstream UI-replica Agents.
 
