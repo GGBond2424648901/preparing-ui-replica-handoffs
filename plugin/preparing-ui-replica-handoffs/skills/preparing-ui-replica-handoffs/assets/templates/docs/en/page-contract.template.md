@@ -41,6 +41,8 @@ sectionId: application-integration
 
 {{applicationIntegration}}
 
+The page must declare its front/middle/back/public-auth `shellId`, canonical `navigationSystemId`, route-derived `activeNavigationEntryId`, inherited Shell regions, and page-owned content regions. Sidebar, TopBar, workspace background, global offsets, and navigation state are inherited and must not be reimplemented in this page.
+
 sectionId: qa-and-gaps
 
 ## QA and Gaps

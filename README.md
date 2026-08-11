@@ -6,7 +6,7 @@ An evidence-driven, bilingual Codex Skill that turns UI screenshots, design-lang
 
 `preparing-ui-replica-handoffs` 面向桌面端 Web 和单一软件系统，重点解决设计稿复刻中的信息遗漏与无依据猜测问题。它会保留原始设计稿不动，并生成页面、状态、变体、导航、布局、组件、视觉 Token、动效、语义状态、微视觉和 Diff 验收合同。
 
-> 当前版本：`1.0.0+codex.20260806040539` · 中英双语 · 桌面端 Web 优先 · 192 项测试
+> 当前版本：`1.0.0+codex.20260811071124` · 中英双语 · 桌面端 Web 优先 · 可直接分发安装
 
 ## 能做什么
 
@@ -33,13 +33,13 @@ An evidence-driven, bilingual Codex Skill that turns UI screenshots, design-lang
 
 ## 快速开始 / Quick Start
 
-### 方式一：安装发布包（推荐）
+### 方式一：直接分发插件包（推荐）
 
-1. 从 [`v1.0.0` Release](https://github.com/GGBond2424648901/preparing-ui-replica-handoffs/releases/tag/v1.0.0) 下载 `preparing-ui-replica-handoffs-plugin.zip`。
+1. 下载仓库根目录的 [`preparing-ui-replica-handoffs-plugin.zip`](preparing-ui-replica-handoffs-plugin.zip)。
 2. 解压后使用其中同时包含 `.codex-plugin/` 和 `skills/` 的 `preparing-ui-replica-handoffs` 插件目录。
-3. 在 Codex 中启用插件，然后把原始设计稿图片目录交给 Skill。
+3. 将该目录加入 Codex 的本地插件市场或插件管理入口，然后在新任务中调用 Skill。
 
-直接下载地址：[preparing-ui-replica-handoffs-plugin.zip](https://github.com/GGBond2424648901/preparing-ui-replica-handoffs/releases/download/v1.0.0/preparing-ui-replica-handoffs-plugin.zip)
+直接下载地址：[preparing-ui-replica-handoffs-plugin.zip](https://github.com/GGBond2424648901/preparing-ui-replica-handoffs/raw/main/preparing-ui-replica-handoffs-plugin.zip)
 
 ### 方式二：从源码使用
 
@@ -84,7 +84,7 @@ The following pair is an early GPT-5.6 Luna Max example created before the curre
 
 ## 当前状态
 
-当前版本为 `1.0.0+codex.20260806040539`。完整测试套件为 192/192 通过。公开发行版使用语义版本标签 `v1.0.0`。
+当前版本为 `1.0.0+codex.20260811071124`。插件包与源码同步包含前台/中台/后台共享 Shell、每个 Shell 唯一导航、固定浏览器环境评分、非基准稳定性检查和导航区域容差隔离规则。公开发行版仍可通过历史 `v1.0.0` Release 获取；仓库根目录的 ZIP 是当前可直接分发的插件包。
 
 ## 开源许可证 / License
 

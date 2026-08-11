@@ -28,12 +28,17 @@
     "pageDiff": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["pageId", "stateId", "variantId", "captureProfileId", "regions", "microVisualTargets", "motionTargets", "semanticTargets"],
+      "required": [
+        "pageId", "stateId", "variantId", "captureProfileId", "scoringProfilePurpose",
+        "scoringMode", "regions", "microVisualTargets", "motionTargets", "semanticTargets"
+      ],
       "properties": {
         "pageId": { "type": "string", "pattern": "^P[0-9]{3,}$" },
         "stateId": { "type": "string", "pattern": "^S[0-9]{2,}$" },
         "variantId": { "type": "string", "pattern": "^V[0-9]{2,}$" },
         "captureProfileId": { "type": "string", "minLength": 1 },
+        "scoringProfilePurpose": { "const": "baseline" },
+        "scoringMode": { "const": "canonical-fixed-environment-region-aware" },
         "regions": {
           "type": "array",
           "minItems": 1,
@@ -42,7 +47,11 @@
             "additionalProperties": false,
             "required": [
               "regionId",
+              "regionRole",
               "bounds",
+              "alignmentAnchor",
+              "propagateGeometryOffset",
+              "scoreContribution",
               "comparisonModes",
               "evidenceTypes",
               "comparisonType",
@@ -56,7 +65,15 @@
             ],
             "properties": {
               "regionId": { "type": "string", "minLength": 1 },
+              "regionRole": {
+                "enum": ["whole-canvas", "shell-navigation", "shell-topbar", "page-content", "overlay", "custom"]
+              },
               "bounds": { "$ref": "#/$defs/bounds" },
+              "alignmentAnchor": {
+                "enum": ["canvas-origin", "region-own-bounds", "navigation-content-divider", "topbar-content-divider", "custom"]
+              },
+              "propagateGeometryOffset": { "type": "boolean" },
+              "scoreContribution": { "type": "boolean" },
               "comparisonModes": {
                 "type": "array",
                 "items": { "enum": ["reference", "current", "overlay", "diff"] },

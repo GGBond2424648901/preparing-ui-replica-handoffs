@@ -118,10 +118,33 @@
     },
     "navigationSystem": {
       "type": "object", "additionalProperties": false,
-      "required": ["navigationSystemId", "shellId", "sourceReferenceIds", "observations", "canonicalEntries", "discrepancies", "freezeStatus", "freezeDecision", "evidenceLevel", "gapIds"],
+      "required": [
+        "navigationSystemId", "shellId", "systemLayer", "reuseMode", "pageLocalCopyPolicy",
+        "implementationTarget", "geometryPolicy", "sourceReferenceIds", "observations",
+        "canonicalEntries", "discrepancies", "freezeStatus", "freezeDecision",
+        "evidenceLevel", "gapIds"
+      ],
       "properties": {
         "navigationSystemId": { "type": "string", "pattern": "^NAV[0-9]{3,}$" },
         "shellId": { "type": "string", "minLength": 1 },
+        "systemLayer": { "enum": ["front-office", "middle-office", "back-office", "auth-public", "unclassified"] },
+        "reuseMode": { "enum": ["one-canonical-tree-per-shell", "shellless", "unclassified"] },
+        "pageLocalCopyPolicy": { "const": "forbidden" },
+        "implementationTarget": { "type": ["string", "null"] },
+        "geometryPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "referenceWidthTolerancePx", "crossRouteRuntimeTolerancePx",
+            "regionAnchoredComparison", "propagateReferenceOffsetToContentDiff"
+          ],
+          "properties": {
+            "referenceWidthTolerancePx": { "type": ["number", "null"], "minimum": 0 },
+            "crossRouteRuntimeTolerancePx": { "const": 0 },
+            "regionAnchoredComparison": { "const": true },
+            "propagateReferenceOffsetToContentDiff": { "const": false }
+          }
+        },
         "sourceReferenceIds": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^REF[0-9]{3,}$" }, "uniqueItems": true },
         "observations": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/observation" } },
         "canonicalEntries": { "type": "array", "items": { "$ref": "#/$defs/canonicalEntry" } },

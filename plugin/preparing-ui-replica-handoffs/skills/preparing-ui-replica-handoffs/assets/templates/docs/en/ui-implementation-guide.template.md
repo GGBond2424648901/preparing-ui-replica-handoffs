@@ -19,6 +19,8 @@ Use `{{implementationMapPath}}` for page, region, component, data, interaction, 
 
 Freeze the global UI design language, tokens, shell, Logo/icon strategy, and shared components first, then implement pages in `implementation-plan.json` order. Each page passes contract-completeness, structural, visual, interaction, and integrated-navigation gates before the next page begins. All routes finish in one application on one development server and shared port; do not create per-page ports or isolated demos.
 
+Before any page-content work, finish `SW001` through `SW004`: classify front/middle/back/public-auth shell families, freeze one canonical navigation tree per shell, build the single Router/shared Shell/navigation registry, and verify one representative route per shell. Pages implement content only and may not own Sidebar, TopBar, global offsets, or selected navigation state.
+
 sectionId: reference-classification
 
 ## Reference Classification and Design-language Inheritance
@@ -72,3 +74,5 @@ sectionId: qa-and-git-safety
 ## QA and Git Safety
 
 {{qaAndGitSafety}}
+
+Replica percentage is computed only under the locked baseline capture profile. Wide, narrow, and zoom profiles are stability-only. When navigation reference width has approved design-generation tolerance, compare navigation and content as separately anchored regions; do not propagate that reference variance into content Diff, while runtime cross-route shell drift remains zero.

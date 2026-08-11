@@ -19,6 +19,8 @@ sectionId: implementation-flow
 
 先冻结全局 UI 设计语言、Token、Shell、Logo/图标策略和共享组件，再按 `implementation-plan.json` 的顺序逐页实现。每页必须依次通过合同完整性、结构、视觉、交互和集成导航门禁，才进入下一页；最终所有路由在同一个应用、同一个开发服务器和共享端口中展示，禁止为每页创建独立端口或孤立 Demo。
 
+任何页面内容开发前，必须先完成 `SW001` 至 `SW004`：划分前台/中台/后台/公开认证 Shell 家族、为每个 Shell 冻结唯一规范导航树、建立统一 Router/共享 Shell/导航注册表，并验证每个 Shell 的一个代表路由。页面只实现内容，不得拥有 Sidebar、TopBar、全局偏移或选中导航状态。
+
 sectionId: reference-classification
 
 ## 参考图分类与设计语言继承
@@ -72,3 +74,5 @@ sectionId: qa-and-git-safety
 ## QA 与 Git 安全
 
 {{qaAndGitSafety}}
+
+复刻百分比只能在锁定的 baseline 采集配置下计算；wide、narrow、zoom 仅做稳定性验收。导航参考宽度存在获批的设计稿生成容差时，导航和内容使用独立锚点比较，不把参考误差扩散到内容区 Diff；运行时跨路由 Shell 漂移仍为零。

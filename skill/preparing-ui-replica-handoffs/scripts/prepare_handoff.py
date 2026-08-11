@@ -578,7 +578,7 @@ def _build_page_inventory(assets: list[dict]) -> dict:
                 "inconsistencyIds": [],
                 "fixtureIds": [_numbered("FIX", number)],
                 "traceabilityIds": [_numbered("TR", number)],
-                "navigationSystemIds": [_numbered("NAV", number)],
+                "navigationSystemIds": [_numbered("NAV", 1)],
                 "motionIds": [],
                 "semanticDimensionIds": [],
                 "semanticValueIds": [],
@@ -595,6 +595,13 @@ def _build_page_inventory(assets: list[dict]) -> dict:
                 },
                 "shell": {
                     "shellId": "unclassified",
+                    "systemLayer": "unclassified",
+                    "navigationSystemId": _numbered("NAV", 1),
+                    "activeNavigationEntryId": None,
+                    "inheritanceMode": "unclassified",
+                    "inheritedRegionIds": [],
+                    "pageOwnedRegionIds": ["region-canvas"],
+                    "globalOffsetOwner": "unclassified",
                     "evidenceLevel": "unknown",
                     "gapId": gap_id,
                 },
@@ -697,6 +704,9 @@ def _build_implementation_map(assets: list[dict]) -> dict:
                 "route": None,
                 "targetFiles": [],
                 "shellComponentId": None,
+                "navigationComponentId": None,
+                "implementationBoundary": "page-content-only",
+                "shellOwnedTargetFiles": [],
                 "regionMappings": [],
                 "componentMappings": [],
                 "dataBindings": [],
@@ -739,7 +749,19 @@ def _build_capture_profiles(assets: list[dict]) -> dict:
         profiles.append(
             {
                 "captureProfileId": _capture_profile_id(number),
+                **_identity(number),
                 "purpose": "baseline",
+                "acceptanceRole": "replica-score",
+                "scoreContribution": True,
+                "environmentLock": {
+                    "viewport": True,
+                    "zoom": True,
+                    "dpr": True,
+                    "browser": True,
+                    "browserVersion": True,
+                    "locale": True,
+                    "fonts": True,
+                },
                 "targetPlatform": "desktop-web",
                 "layoutPolicy": "desktop-hybrid-elastic",
                 "browser": "unclassified",
@@ -757,7 +779,17 @@ def _build_capture_profiles(assets: list[dict]) -> dict:
                 "gapIds": [gap_id],
             }
         )
-    return {"schemaVersion": SCHEMA_VERSION, "profiles": profiles}
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "acceptancePolicy": {
+            "canonicalPurpose": "baseline",
+            "canonicalEnvironmentMustBeLocked": True,
+            "scoreOnlyCanonical": True,
+            "requiredStabilityPurposes": ["wide", "narrow", "zoom"],
+            "stabilityProfilesAffectReplicaScore": False,
+        },
+        "profiles": profiles,
+    }
 
 
 def _build_diff_regions(assets: list[dict]) -> dict:
@@ -767,15 +799,21 @@ def _build_diff_regions(assets: list[dict]) -> dict:
             {
                 **_identity(number),
                 "captureProfileId": _capture_profile_id(number),
+                "scoringProfilePurpose": "baseline",
+                "scoringMode": "canonical-fixed-environment-region-aware",
                 "regions": [
                     {
                         "regionId": "region-canvas",
+                        "regionRole": "whole-canvas",
                         "bounds": {
                             "x": 0,
                             "y": 0,
                             "width": asset["width"],
                             "height": asset["height"],
                         },
+                        "alignmentAnchor": "canvas-origin",
+                        "propagateGeometryOffset": False,
+                        "scoreContribution": True,
                         "comparisonModes": [
                             "reference",
                             "current",
@@ -978,38 +1016,51 @@ def _build_traceability_map(assets: list[dict]) -> dict:
 
 
 def _build_navigation_reconciliation(assets: list[dict]) -> dict:
-    systems = []
+    observations = []
+    source_reference_ids = []
+    gap_ids = []
     for number, _asset in enumerate(assets, start=1):
         gap_id = _numbered("G", number)
         reference_id = _numbered("REF", number)
-        systems.append(
+        source_reference_ids.append(reference_id)
+        gap_ids.append(gap_id)
+        observations.append(
             {
-                "navigationSystemId": _numbered("NAV", number),
-                "shellId": "unclassified",
-                "sourceReferenceIds": [reference_id],
-                "observations": [
-                    {
-                        "observationId": _numbered("NOBS", number),
-                        "referenceId": reference_id,
-                        "pageIdentity": _identity(number),
-                        "navigationPresence": "unknown",
-                        "entries": [],
-                        "evidenceLevel": "unknown",
-                        "gapIds": [gap_id],
-                    }
-                ],
-                "canonicalEntries": [],
-                "discrepancies": [],
-                "freezeStatus": "proposed",
-                "freezeDecision": {
-                    "zh-CN": "待跨设计图核对导航项、标题、图标、顺序、路由和权限后冻结。",
-                    "en-US": "Freeze after reconciling navigation entries, labels, icons, order, routes, and permissions across references.",
-                },
+                "observationId": _numbered("NOBS", number),
+                "referenceId": reference_id,
+                "pageIdentity": _identity(number),
+                "navigationPresence": "unknown",
+                "entries": [],
                 "evidenceLevel": "unknown",
                 "gapIds": [gap_id],
             }
         )
-    return {"schemaVersion": SCHEMA_VERSION, "navigationSystems": systems}
+    system = {
+        "navigationSystemId": _numbered("NAV", 1),
+        "shellId": "unclassified",
+        "systemLayer": "unclassified",
+        "reuseMode": "unclassified",
+        "pageLocalCopyPolicy": "forbidden",
+        "implementationTarget": None,
+        "geometryPolicy": {
+            "referenceWidthTolerancePx": None,
+            "crossRouteRuntimeTolerancePx": 0,
+            "regionAnchoredComparison": True,
+            "propagateReferenceOffsetToContentDiff": False,
+        },
+        "sourceReferenceIds": source_reference_ids,
+        "observations": observations,
+        "canonicalEntries": [],
+        "discrepancies": [],
+        "freezeStatus": "proposed",
+        "freezeDecision": {
+            "zh-CN": "先按前台、中台、后台或公开认证壳层归类页面，再为每个壳层冻结唯一共享导航树；禁止按页面复制导航。",
+            "en-US": "Classify pages into front-, middle-, back-office, or public/auth shell families, then freeze one shared canonical tree per shell; page-local navigation copies are forbidden.",
+        },
+        "evidenceLevel": "unknown",
+        "gapIds": gap_ids,
+    }
+    return {"schemaVersion": SCHEMA_VERSION, "navigationSystems": [system]}
 
 
 def _build_motion_contract() -> dict:
@@ -1028,8 +1079,12 @@ def _build_application_system(assets: list[dict], global_gap_id: str) -> dict:
             {
                 **_identity(number),
                 "path": None,
-                "shellId": None,
-                "navigationEntryId": None,
+                "shellId": "unclassified",
+                "navigationSystemId": _numbered("NAV", 1),
+                "activeNavigationEntryId": None,
+                "shellInheritanceMode": "unclassified",
+                "inheritedRegionIds": [],
+                "pageOwnedRegionIds": ["region-canvas"],
                 "status": "proposed",
                 "evidenceLevel": "unknown",
                 "gapIds": [gap_id],
@@ -1045,15 +1100,68 @@ def _build_application_system(assets: list[dict], global_gap_id: str) -> dict:
         "router": None,
         "defaultRoute": None,
         "routeEntries": route_entries,
-        "shellFamilies": [],
-        "navigation": {"status": "unknown"},
-        "sharedState": {"status": "unknown"},
-        "sharedComponents": [],
+        "shellFamilies": [
+            {
+                "shellId": "unclassified",
+                "systemLayer": "unclassified",
+                "navigationSystemId": _numbered("NAV", 1),
+                "routePrefixes": [],
+                "layoutComponentId": None,
+                "navigationComponentId": None,
+                "implementationTarget": None,
+                "reuseMode": "unclassified",
+                "globalOffsetOwner": "unclassified",
+                "geometryPolicy": {
+                    "sidebarWidthToken": None,
+                    "collapsedSidebarWidthToken": None,
+                    "topbarHeightToken": None,
+                    "contentInsetToken": None,
+                    "referenceWidthTolerancePx": None,
+                    "crossRouteRuntimeTolerancePx": 0,
+                    "propagateReferenceOffsetToContentDiff": False,
+                },
+                "scrollOwnership": "unclassified",
+                "zoomBehavior": "unclassified",
+                "status": "proposed",
+                "evidenceLevel": "unknown",
+                "gapIds": [global_gap_id],
+            }
+        ],
+        "navigation": {
+            "registryMode": "unclassified",
+            "activeStateSource": "unclassified",
+            "permissionMode": "unclassified",
+            "pageLocalNavigationPolicy": "forbidden",
+            "crossRouteShellPersistence": "unclassified",
+            "status": "proposed",
+            "gapIds": [global_gap_id],
+        },
+        "sharedState": {
+            "routeStateOwner": "unclassified",
+            "shellStateOwner": "unclassified",
+            "navigationStateOwner": "unclassified",
+            "status": "proposed",
+            "gapIds": [global_gap_id],
+        },
+        "sharedComponents": ["AppRouter", "SharedShell", "CanonicalNavigationRegistry"],
+        "visualAcceptancePolicy": {
+            "canonicalProfilePurpose": "baseline",
+            "canonicalZoomRequired": True,
+            "scoreOnlyCanonicalProfile": True,
+            "nonCanonicalPurposes": ["wide", "narrow", "zoom"],
+            "nonCanonicalAcceptance": "stability-only",
+            "regionAwareDiff": True,
+            "navigationReferenceToleranceMode": "explicit-region-geometry-tolerance",
+            "crossRouteShellDriftTolerancePx": 0,
+        },
         "implementationSequence": [
             "freeze-design-language-and-reference-authority",
-            "implement-tokens-shell-and-shared-components",
+            "classify-pages-into-shell-families",
+            "freeze-one-canonical-navigation-per-shell",
+            "implement-single-router-shared-shells-and-navigation",
+            "verify-one-representative-route-per-shell",
             "implement-and-accept-pages-in-order",
-            "verify-integrated-routing-and-navigation",
+            "verify-all-routes-shell-persistence-and-responsive-stability",
         ],
         "status": "proposed",
         "evidenceLevel": "approved",
@@ -1070,9 +1178,12 @@ def _build_implementation_plan(assets: list[dict]) -> dict:
                 "workItemId": _numbered("WI", number),
                 "order": number,
                 **_identity(number),
-                "dependencies": ["foundation"],
+                "dependencies": ["SW004"],
                 "route": None,
-                "shellId": None,
+                "shellId": "unclassified",
+                "navigationSystemId": _numbered("NAV", 1),
+                "activeNavigationEntryId": None,
+                "implementationBoundary": "page-content-only",
                 "requiredReferenceIds": [_numbered("REF", number)],
                 "requiredMicroVisualFeatureIds": [],
                 "gates": {
@@ -1086,33 +1197,79 @@ def _build_implementation_plan(assets: list[dict]) -> dict:
                 "gapIds": [gap_id],
             }
         )
+    system_items = [
+        {
+            "systemWorkItemId": "SW001",
+            "order": 1,
+            "kind": "classify-shells",
+            "dependencies": [],
+            "deliverables": ["front-middle-back-shell-family-map", "page-to-shell-bindings"],
+            "exitGate": ["every page has one shell family or an explicit shellless decision"],
+            "status": "blocked",
+        },
+        {
+            "systemWorkItemId": "SW002",
+            "order": 2,
+            "kind": "freeze-navigation",
+            "dependencies": ["SW001"],
+            "deliverables": ["one-canonical-navigation-tree-per-shell", "route-permission-order-resolution"],
+            "exitGate": ["no page-local navigation system remains"],
+            "status": "blocked",
+        },
+        {
+            "systemWorkItemId": "SW003",
+            "order": 3,
+            "kind": "build-router-shells",
+            "dependencies": ["SW002"],
+            "deliverables": ["single-router", "shared-shell-components", "canonical-navigation-registry"],
+            "exitGate": ["shell owns global offsets and pages implement content only"],
+            "status": "blocked",
+        },
+        {
+            "systemWorkItemId": "SW004",
+            "order": 4,
+            "kind": "verify-shell-route-smoke",
+            "dependencies": ["SW003"],
+            "deliverables": ["one-routed-representative-page-per-shell"],
+            "exitGate": ["navigation click preserves shell geometry and selects the route-derived item"],
+            "status": "blocked",
+        },
+    ]
     phases = [
         {
-            "phaseId": "foundation",
+            "phaseId": "system-contract",
             "order": 1,
-            "name": {"zh-CN": "共享视觉基础", "en-US": "Shared visual foundation"},
-            "deliverables": ["reference authority", "UI design language", "tokens", "shells", "shared components"],
-            "exitGate": ["design-language scope frozen", "shared contracts approved"],
+            "name": {"zh-CN": "系统壳层与导航契约", "en-US": "System shell and navigation contract"},
+            "deliverables": ["reference authority", "UI design language", "shell-family map", "canonical navigation trees"],
+            "exitGate": ["front/middle/back shell membership frozen", "one canonical navigation tree per shell"],
+        },
+        {
+            "phaseId": "runtime-foundation",
+            "order": 2,
+            "name": {"zh-CN": "统一运行时基础", "en-US": "Unified runtime foundation"},
+            "deliverables": ["single application", "shared port", "router", "shared shells", "navigation registry"],
+            "exitGate": ["one representative route per shell preserves shell identity and geometry"],
         },
         {
             "phaseId": "pages",
-            "order": 2,
-            "name": {"zh-CN": "逐页复刻", "en-US": "Page-by-page replication"},
-            "deliverables": ["page contracts", "micro visual contracts", "routed page implementations"],
-            "exitGate": ["each page passes five gates before acceptance"],
+            "order": 3,
+            "name": {"zh-CN": "逐页内容复刻", "en-US": "Page-content replication"},
+            "deliverables": ["page contracts", "micro visual contracts", "page-content-only route implementations"],
+            "exitGate": ["each page passes five gates inside its inherited shell"],
         },
         {
-            "phaseId": "integration",
-            "order": 3,
-            "name": {"zh-CN": "系统集成", "en-US": "System integration"},
-            "deliverables": ["single application", "shared port", "router", "navigation", "cross-page consistency"],
-            "exitGate": ["all approved routes reachable in one application"],
+            "phaseId": "continuous-acceptance",
+            "order": 4,
+            "name": {"zh-CN": "连续系统验收", "en-US": "Continuous system acceptance"},
+            "deliverables": ["full route walk", "canonical visual scoring", "wide/narrow/zoom stability evidence"],
+            "exitGate": ["all routes reachable with zero cross-route shell drift"],
         },
     ]
     return {
         "schemaVersion": SCHEMA_VERSION,
         "strategy": "foundation-then-page-by-page-in-one-application",
         "phases": phases,
+        "systemWorkItems": system_items,
         "pageWorkItems": page_items,
     }
 
@@ -1200,7 +1357,8 @@ def _page_doc_values(number: int, asset: dict, locale: str) -> dict[str, str]:
             f"禁止用页面根节点整体缩放代替布局（`{gap_id}`）。"
         )
         qa_text = (
-            f"视觉、结构与交互 QA 均为 `not-run`。完成前必须解决或批准缺口 `{gap_id}`。"
+            f"视觉、结构与交互 QA 均为 `not-run`。固定缩放的 baseline 是唯一复刻评分环境；"
+            f"wide/narrow/zoom 仅做稳定性验收。完成前必须解决或批准缺口 `{gap_id}`。"
         )
         micro_text = (
             f"尚未自动测量微视觉特征。人工检查 `{_numbered('REF', number)}` 后，必须登记图标/Logo、"
@@ -1208,10 +1366,10 @@ def _page_doc_values(number: int, asset: dict, locale: str) -> dict[str, str]:
             f"当前关联缺口 `{gap_id}`。设计语言继承与动效 `MOT###` 尚未分类，不能从静态图擅自补写。"
         )
         integration_text = (
-            "本页必须作为统一 Router 下的一个路由，在同一应用、同一开发服务器和共享端口中实现；"
-            "复用已冻结的设计语言、Shell 与组件，不得创建独立页面服务器。路由、导航入口和 Shell "
-            f"尚未确认（`{gap_id}`）。证据图谱：`CAL{number:03d}`、`FIX{number:03d}`、`TR{number:03d}`、"
-            f"`NAV{number:03d}`；必须先核对跨图导航标题、图标、顺序、路由和权限并冻结。"
+            "页面内容开发前，必须先完成前/中/后台 Shell 分类、每个 Shell 唯一规范导航冻结、统一 Router/"
+            "共享 Shell/导航注册表建设，并接入每个 Shell 的代表路由。本页只实现内容区，不得复制 Sidebar、"
+            "TopBar、全局偏移或导航状态。路由、激活导航入口和 Shell 尚未确认"
+            f"（`{gap_id}`）。证据图谱：`CAL{number:03d}`、`FIX{number:03d}`、`TR{number:03d}`、`NAV001`。"
         )
     else:
         identity_text = (
@@ -1238,8 +1396,9 @@ def _page_doc_values(number: int, asset: dict, locale: str) -> dict[str, str]:
             f"Whole-page root scaling cannot substitute for layout (`{gap_id}`)."
         )
         qa_text = (
-            f"Visual, structural, and interaction QA are `not-run`. Gap `{gap_id}` "
-            "must be resolved or approved before completion."
+            f"Visual, structural, and interaction QA are `not-run`. The fixed-zoom baseline is the only "
+            f"replica-scoring profile; wide/narrow/zoom are stability-only. Gap `{gap_id}` must be resolved "
+            "or approved before completion."
         )
         micro_text = (
             f"Micro features are not auto-measured. After inspecting `{_numbered('REF', number)}`, "
@@ -1248,11 +1407,11 @@ def _page_doc_values(number: int, asset: dict, locale: str) -> dict[str, str]:
             "Design-language inheritance and `MOT###` motion remain unclassified and must not be invented from a static board."
         )
         integration_text = (
-            "Implement this page as one route under the unified Router in the same application, development "
-            "server, and shared port. Reuse the frozen design language, shell, and components; do not create "
-            f"a standalone page server. Route, navigation entry, and shell remain unresolved (`{gap_id}`). "
-            f"Evidence graph: `CAL{number:03d}`, `FIX{number:03d}`, `TR{number:03d}`, `NAV{number:03d}`. "
-            "Reconcile cross-board navigation labels, icons, order, routes, and permissions before freeze."
+            "Before page-content work, classify front/middle/back shell families, freeze one canonical navigation "
+            "tree per shell, build the unified Router/shared Shell/navigation registry, and route one representative "
+            "page per shell. This page implements content only and must not copy Sidebar, TopBar, global offsets, "
+            f"or navigation state. Route, active entry, and shell remain unresolved (`{gap_id}`). Evidence graph: "
+            f"`CAL{number:03d}`, `FIX{number:03d}`, `TR{number:03d}`, `NAV001`."
         )
     qa_text += f"\nQA IDs: {qa_ids}"
     return {
@@ -1412,6 +1571,9 @@ def _build_csv_documents(assets: list[dict]) -> dict[str, bytes]:
         "stateId",
         "variantId",
         "captureProfileId",
+        "capturePurpose",
+        "acceptanceRole",
+        "scoreContribution",
         "regionId",
         "evidenceType",
         "referencePath",
@@ -1467,6 +1629,9 @@ def _build_csv_documents(assets: list[dict]) -> dict[str, bytes]:
                     "qaId": qa["qaId"],
                     **identity,
                     "captureProfileId": _capture_profile_id(number),
+                    "capturePurpose": "baseline",
+                    "acceptanceRole": "replica-score",
+                    "scoreContribution": "true",
                     "regionId": "region-canvas",
                     "evidenceType": evidence_type,
                     "referencePath": asset["deliveryRelativePath"],

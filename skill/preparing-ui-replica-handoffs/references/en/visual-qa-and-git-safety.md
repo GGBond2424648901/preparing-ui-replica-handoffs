@@ -163,3 +163,35 @@ Diff the governing visual language by region: background/material layer, glass b
 ruleId: QG-031
 
 Accept semantic visuals per `SEMVAL###`: compare text, background, border, indicator/icon colors; pill height/width/padding/radius/border/dot dimensions; typography; and contrast separately. Also verify business meaning, ordering, and accessible name. A color match with the wrong state meaning still fails.
+
+sectionId: canonical-score-and-shell-continuity
+
+## Canonical score and shell continuity
+
+ruleId: QG-032
+
+Compute the replica percentage only from the approved baseline capture taken with the exact locked viewport, browser zoom, DPR, browser/version, locale, theme, and fonts. A screenshot taken under another zoom or environment cannot pass canonical visual acceptance even when it looks close.
+
+ruleId: QG-033
+
+Run `wide`, `narrow`, and `zoom` profiles as stability gates. They verify no clipping, unreachable controls, unauthorized mobile conversion, root scaling, accidental page-wide horizontal scrolling, or incorrect overflow ownership. Their screenshots and structural evidence do not enter the canonical replica score.
+
+ruleId: QG-034
+
+When navigation reference width has documented design-generation uncertainty, compare navigation and page content as separately anchored regions. The navigation region may use its approved geometry tolerance; page content aligns to the measured navigation/content divider so that an accepted navigation-width difference does not multiply across the full-page Diff.
+
+ruleId: QG-035
+
+Reference tolerance never becomes runtime tolerance. Navigate between every pair of routes in the same shell and require the same `data-shell-id`, canonical menu tree, sidebar width token, topbar geometry, and content origin. Cross-route geometry drift tolerance is zero.
+
+ruleId: QG-036
+
+Replay a full canonical navigation route walk. For every entry verify URL, active item, expanded parent, permission visibility, browser back/forward, no full-page reload, and continued reachability of all approved routes. A set of isolated passing screenshots does not satisfy integrated-system acceptance.
+
+ruleId: QG-037
+
+The Shell owns global offsets exactly once. Structural evidence fails when page roots contain compensating sidebar offsets or duplicate Sidebar/TopBar DOM, even if a single screenshot aligns visually.
+
+ruleId: QG-038
+
+Approve responsive behavior only when component and region contracts provide min/base/max sizes, grow/shrink policy, wrap/reflow decision, and overflow owner. Browser zoom is evaluated through effective CSS viewport behavior; whole-page `transform: scale()` or CSS `zoom` fails.

@@ -175,3 +175,27 @@ ruleId: DP-030
 ruleId: DP-031
 
 `semantic-visual-encoding.json` 按 `SEM###` 维度和 `SEMVAL###` 值保存状态/等级语法。每个值必须有来源参考图和 Bounds，并完整记录颜色角色、形状、几何、字体、交互状态、对比度、证据等级与缺口。逐页合同和 Diff 目标必须可解析到这些 ID。
+
+sectionId: system-first-shell-contracts
+
+## 系统优先的 Shell 与验收合同
+
+ruleId: DP-032
+
+`application-system.json` 是运行时组装的权威合同。它必须按证据记录前台、中台、后台和公开/认证范围的实质 Shell 家族；每个 Shell 包含规范导航、路由前缀、布局/导航实现目标、复用方式、几何 Token、全局偏移所有者、滚动、缩放行为和状态。批准应用不得保留 `null` 或 `unclassified`。
+
+ruleId: DP-033
+
+`navigation-reconciliation.json` 按 Shell 家族汇总观察，而不是按截图建立系统。准备骨架只生成一个待分类的共享证据池；视觉分类可以将其拆分为不同 Shell，但每个获批 Shell 最多只有一棵规范导航树，且始终禁止页面本地导航副本。
+
+ruleId: DP-034
+
+`implementation-plan.json` 必须先安排四个系统工作项：Shell 分类、规范导航冻结、统一 Router/共享 Shell/导航注册表建设，以及每个 Shell 代表路由验证。所有页面工作项都依赖该门禁，并声明 `implementationBoundary: page-content-only`。
+
+ruleId: DP-035
+
+`capture-profile.json` 必须区分用于复刻评分的锁定基准 profile，以及必需的 `wide`、`narrow`、`zoom` 稳定性 profile。基准环境锁定视口、缩放比例、DPR、浏览器/版本、语言环境、主题和字体；稳定性 profile 不得影响复刻百分比。
+
+ruleId: DP-036
+
+`diff-regions.json` 支持锚点化的 `shell-navigation`、`shell-topbar` 和 `page-content` 区域。生成式证据不确定时，导航可以设置明确的参考几何容差，但已接受偏移不得传导到内容区 Diff，运行时跨路由 Shell 漂移仍为零。

@@ -54,6 +54,9 @@
       "required": [
         "componentId",
         "name",
+        "ownershipScope",
+        "shellIds",
+        "globalOffsetOwnership",
         "status",
         "evidenceLevel",
         "sourcePageIdentities",
@@ -72,6 +75,13 @@
       "properties": {
         "componentId": { "type": "string", "minLength": 1 },
         "name": { "$ref": "#/$defs/localizedText" },
+        "ownershipScope": { "enum": ["global", "shared-shell", "page-local"] },
+        "shellIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "globalOffsetOwnership": { "enum": ["shell-only", "none"] },
         "status": { "$ref": "#/$defs/lifecycleStatus" },
         "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
         "sourcePageIdentities": {

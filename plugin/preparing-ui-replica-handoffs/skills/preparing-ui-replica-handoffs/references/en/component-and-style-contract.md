@@ -179,3 +179,23 @@ Measure height, minimum width, horizontal/vertical padding, label-to-indicator g
 ruleId: CS-030
 
 Equal colors do not imply equal semantics: priority P0 red, error-feedback red, and blocked-state red keep separate tokens and meanings unless an authoritative board explicitly unifies them. Never infer values or ordering across dimensions; unseen P3, success, offline, or AI-failed values remain checklist items rather than formal facts. Pages declare actual usage through `semanticDimensionIds` and `semanticValueIds`, with color, geometry, and contrast acceptance in `semanticTargets`.
+
+sectionId: shared-shell-runtime
+
+## Shared shell runtime components
+
+ruleId: CS-031
+
+Register one layout component and, when present, one canonical navigation component for each approved shell family. The Shell owns Sidebar, TopBar, workspace background, global insets, collapse state, scroll ownership, and Router outlet. A page component mounts only inside that outlet and cannot contain a second shell implementation.
+
+ruleId: CS-032
+
+Use one navigation registry per shell as the source of labels, icons, order, hierarchy, routes, permissions, and badges. Permission handling filters the canonical tree; it does not create page-specific menus. Active state comes from Router location, not local page state.
+
+ruleId: CS-033
+
+Implement shell geometry with Grid/Flex and `minmax(0, 1fr)` or an equivalent real layout. Freeze sidebar/topbar/content-inset values as shared tokens. Page roots use `width: 100%` and `min-width: 0`; they do not use whole-page scaling or global sidebar-offset compensation.
+
+ruleId: CS-034
+
+Every reusable component records min/base/max size, grow/shrink behavior, wrapping policy, overflow owner, and effective-viewport zoom behavior. Browser zoom is treated as a narrower CSS viewport: shrink to contracted minima, then use the evidenced region scroll or approved reflow while keeping controls reachable.

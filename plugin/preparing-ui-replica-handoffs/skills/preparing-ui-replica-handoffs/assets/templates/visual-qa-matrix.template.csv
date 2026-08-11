@@ -1,1 +1,1 @@
-qaId,pageId,stateId,variantId,captureProfileId,regionId,evidenceType,referencePath,currentPath,overlayPath,diffPath,evidenceRecordPath,evidenceRecordSha256,status,notesZh,notesEn
+qaId,pageId,stateId,variantId,captureProfileId,capturePurpose,acceptanceRole,scoreContribution,regionId,evidenceType,referencePath,currentPath,overlayPath,diffPath,evidenceRecordPath,evidenceRecordSha256,status,notesZh,notesEn

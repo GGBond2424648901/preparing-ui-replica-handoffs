@@ -3,11 +3,12 @@
   "title": "Page-by-page UI replica implementation plan",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "strategy", "phases", "pageWorkItems"],
+  "required": ["schemaVersion", "strategy", "phases", "systemWorkItems", "pageWorkItems"],
   "properties": {
     "schemaVersion": { "const": "1.0.0" },
     "strategy": { "const": "foundation-then-page-by-page-in-one-application" },
     "phases": { "type": "array", "items": { "$ref": "#/$defs/phase" }, "minItems": 3 },
+    "systemWorkItems": { "type": "array", "items": { "$ref": "#/$defs/systemWorkItem" }, "minItems": 4 },
     "pageWorkItems": { "type": "array", "items": { "$ref": "#/$defs/workItem" }, "minItems": 1 }
   },
   "$defs": {
@@ -20,11 +21,25 @@
         "exitGate": { "type": "array", "items": { "type": "string" } }
       }
     },
+    "systemWorkItem": {
+      "type": "object", "additionalProperties": false,
+      "required": ["systemWorkItemId", "order", "kind", "dependencies", "deliverables", "exitGate", "status"],
+      "properties": {
+        "systemWorkItemId": { "type": "string", "pattern": "^SW[0-9]{3,}$" },
+        "order": { "type": "integer", "minimum": 1 },
+        "kind": { "enum": ["classify-shells", "freeze-navigation", "build-router-shells", "verify-shell-route-smoke"] },
+        "dependencies": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "deliverables": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "uniqueItems": true },
+        "exitGate": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "uniqueItems": true },
+        "status": { "enum": ["blocked", "ready", "in-progress", "accepted"] }
+      }
+    },
     "workItem": {
       "type": "object", "additionalProperties": false,
       "required": [
         "workItemId", "order", "pageId", "stateId", "variantId", "dependencies",
-        "route", "shellId", "requiredReferenceIds", "requiredMicroVisualFeatureIds",
+        "route", "shellId", "navigationSystemId", "activeNavigationEntryId",
+        "implementationBoundary", "requiredReferenceIds", "requiredMicroVisualFeatureIds",
         "gates", "status", "gapIds"
       ],
       "properties": {
@@ -35,6 +50,9 @@
         "variantId": { "type": "string", "pattern": "^V[0-9]{2,}$" },
         "dependencies": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
         "route": { "type": ["string", "null"] }, "shellId": { "type": ["string", "null"] },
+        "navigationSystemId": { "type": ["string", "null"], "pattern": "^NAV[0-9]{3,}$" },
+        "activeNavigationEntryId": { "type": ["string", "null"], "pattern": "^NAVITEM[0-9]{3,}$" },
+        "implementationBoundary": { "const": "page-content-only" },
         "requiredReferenceIds": { "type": "array", "items": { "type": "string", "pattern": "^REF[0-9]{3,}$" }, "uniqueItems": true },
         "requiredMicroVisualFeatureIds": { "type": "array", "items": { "type": "string", "pattern": "^MV[0-9]{3,}$" }, "uniqueItems": true },
         "gates": {

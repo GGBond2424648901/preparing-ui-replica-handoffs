@@ -151,3 +151,35 @@ Pages declare used semantic dimensions through `semanticDimensionIds` and list t
 ruleId: PS-025
 
 Semantic labels cover default view, selected/filter use, hover, focus-visible, disabled, long copy, locale variants, light/dark carriers, and high-contrast conditions. Different dimensions such as priority, workflow status, and evidence grade never exchange meaning even when they share a hue. Every visible `SEMVAL###` on an approved page has a `semanticTargets` Diff.
+
+sectionId: shared-shell-page-boundary
+
+## Shared shell and page-content boundary
+
+ruleId: PS-026
+
+Before navigation freeze, classify every target as `front-office`, `middle-office`, `back-office`, `auth-public`, or an explicitly approved shellless page. Pages in one shell family reference the same `shellId` and exactly one canonical `navigationSystemId`; a screenshot-per-page navigation system is a blocking anti-pattern.
+
+ruleId: PS-027
+
+A page contract declares `inheritanceMode`, `inheritedRegionIds`, and `pageOwnedRegionIds`. Sidebar, TopBar, workspace background, global content origin, route state, permission-filtered navigation, and shell scrolling belong to the shared shell. The page implements content regions only and must not recreate inherited regions.
+
+ruleId: PS-028
+
+The Router owns route state and derives the active navigation entry from location. Pages reference `activeNavigationEntryId` for acceptance but do not hard-code selected menu state, labels, icons, order, or permission visibility. Browser back/forward restores the same canonical selection.
+
+ruleId: PS-029
+
+The Shell is the sole owner of sidebar width and global content offset. Page roots must not compensate with global `margin-left`, `padding-left`, `left`, `width: calc(100vw - sidebarWidth)`, or equivalent values. All pages in one shell consume the same frozen geometry tokens.
+
+sectionId: canonical-scoring-and-stability
+
+## Canonical scoring and adaptive stability
+
+ruleId: PS-030
+
+Replica percentage is accepted only from the approved `baseline` capture profile with exact viewport, browser zoom, DPR, browser/version, locale, theme, and fonts locked. `wide`, `narrow`, and `zoom` profiles verify responsive stability, overflow ownership, reachability, and component adaptation only and contribute nothing to the canonical replica score.
+
+ruleId: PS-031
+
+When generated design evidence makes sidebar width slightly uncertain, split navigation and page content into anchored Diff regions. Record an explicit reference-width tolerance for navigation, align page content from the measured navigation/content divider, and do not propagate accepted navigation width variance into content Diff. Runtime cross-route shell-width tolerance remains zero.

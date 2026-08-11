@@ -175,3 +175,27 @@ ruleId: DP-030
 ruleId: DP-031
 
 `semantic-visual-encoding.json` stores status/grade grammar as `SEM###` dimensions and `SEMVAL###` values. Every value has a source reference and Bounds plus complete color roles, shape, geometry, typography, interaction states, contrast, evidence level, and gaps. Page contracts and Diff targets resolve to these IDs.
+
+sectionId: system-first-shell-contracts
+
+## System-first shell and acceptance contracts
+
+ruleId: DP-032
+
+`application-system.json` is the authoritative runtime assembly contract. It contains substantive shell families for front-, middle-, back-office, and public/auth scopes as evidenced; each shell records its canonical navigation, route prefixes, layout/navigation implementation targets, reuse mode, geometry tokens, global-offset owner, scrolling, zoom behavior, and status. An approved application cannot keep these values `null` or `unclassified`.
+
+ruleId: DP-033
+
+`navigation-reconciliation.json` groups observations by shell family rather than by screenshot. The preparation skeleton starts with one unresolved shared evidence pool; visual classification may split it into shell families, but each approved shell has at most one canonical tree and page-local navigation copies remain forbidden.
+
+ruleId: DP-034
+
+`implementation-plan.json` begins with four system work items: classify shells, freeze canonical navigation, build the single Router/shared shells/navigation registries, and verify one representative route per shell. Every page work item depends on that gate and has `implementationBoundary: page-content-only`.
+
+ruleId: DP-035
+
+`capture-profile.json` separates one locked canonical baseline used for replica scoring from required `wide`, `narrow`, and `zoom` stability profiles. The baseline locks viewport, zoom, DPR, browser/version, locale, theme, and fonts. Stability profiles never affect replica percentage.
+
+ruleId: DP-036
+
+`diff-regions.json` supports anchored `shell-navigation`, `shell-topbar`, and `page-content` regions. Navigation may have an explicit reference geometry tolerance when generated evidence is uncertain, but the accepted shift cannot propagate into page-content Diff and cross-route runtime shell drift remains zero.
