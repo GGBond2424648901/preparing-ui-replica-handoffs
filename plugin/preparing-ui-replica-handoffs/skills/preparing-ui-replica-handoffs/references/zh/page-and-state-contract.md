@@ -151,3 +151,35 @@ ruleId: PS-024
 ruleId: PS-025
 
 语义标签需同时覆盖默认视图、选中/筛选、hover、focus-visible、禁用、长文案、多语言、深浅背景和高对比环境。优先级、工作流状态、证据等级等不同维度即使同色也不得互换含义；批准页面的每个可见 `SEMVAL###` 必须有 `semanticTargets` Diff。
+
+sectionId: shared-shell-page-boundary
+
+## 共享 Shell 与页面内容边界
+
+ruleId: PS-026
+
+冻结导航前，必须把每个目标归入 `front-office`、`middle-office`、`back-office`、`auth-public`，或明确批准为无 Shell 页面。同一 Shell 家族的页面必须引用同一 `shellId` 和且仅一套规范 `navigationSystemId`；按截图逐页生成导航属于阻塞性反模式。
+
+ruleId: PS-027
+
+逐页合同必须声明 `inheritanceMode`、`inheritedRegionIds` 和 `pageOwnedRegionIds`。Sidebar、TopBar、工作区背景、全局内容起点、路由状态、按权限过滤的导航和 Shell 滚动均属于共享 Shell；页面只实现内容区，不得重新创建继承区域。
+
+ruleId: PS-028
+
+Router 统一管理路由状态，并从当前位置推导激活导航项。页面可以为验收引用 `activeNavigationEntryId`，但不得写死选中菜单、标题、图标、顺序或权限可见性；浏览器前进/后退必须恢复同一规范选中状态。
+
+ruleId: PS-029
+
+只有 Shell 可以管理侧栏宽度和全局内容偏移。页面根节点不得使用全局 `margin-left`、`padding-left`、`left`、`width: calc(100vw - sidebarWidth)` 或等价补偿；同一 Shell 的所有页面必须使用同一组冻结几何 Token。
+
+sectionId: canonical-scoring-and-stability
+
+## 基准评分与自适应稳定性
+
+ruleId: PS-030
+
+复刻百分比只能来自已批准的 `baseline` 采集配置，并严格锁定视口、浏览器缩放比例、DPR、浏览器/版本、语言环境、主题和字体。`wide`、`narrow`、`zoom` 只验证响应式稳定、滚动归属、可达性和组件适应，不计入基准复刻分数。
+
+ruleId: PS-031
+
+当生成式设计稿导致侧栏宽度存在轻微不确定性时，导航区和页面内容区必须拆成锚点 Diff 区域。导航记录明确的参考宽度容差，内容区从实测导航/内容分界线对齐；已接受的导航宽度差异不得扩散到内容区 Diff。运行时跨路由 Shell 宽度容差仍为零。

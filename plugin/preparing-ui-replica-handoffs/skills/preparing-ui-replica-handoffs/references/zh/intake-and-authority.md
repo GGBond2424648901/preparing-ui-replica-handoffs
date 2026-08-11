@@ -123,3 +123,15 @@ sectionId: navigation-authority
 ruleId: IA-020
 
 在逐页建设前，对所有参考图的导航逐项观察：标题、图标、顺序、父子层级、路由、选中态以及角色/权限可见性。把漏项、多项、标题差异、图标差异、顺序差异、层级差异、路由差异和权限差异登记到 `navigation-reconciliation.json`；形成唯一规范导航树并达到 `freezeStatus: approved` 后，页面才能批准。
+
+ruleId: IA-021
+
+冻结导航前，必须把每个页面归入有证据的前台、中台、后台、公开/认证或无 Shell 家族。相同的 Sidebar、TopBar、Logo、用户区、内容起点、路由命名空间和权限上下文都属于 Shell 家族证据。无法确认时保留阻塞缺口，禁止通过“每张截图一套 Shell/导航”来回避归类。
+
+sectionId: canonical-capture-authority
+
+## 基准采集与容差权威
+
+ruleId: IA-022
+
+输入阶段必须记录最终复刻评分所用的准确浏览器缩放比例，以及视口、DPR、浏览器/版本、语言环境、主题和字体。还要记录用户批准的、由生成式设计稿误差导致的导航参考宽度容差。这些属于批准事实，不能使用推断默认值；wide/narrow/zoom 稳定性 profile 必须分开，且不影响复刻百分比。

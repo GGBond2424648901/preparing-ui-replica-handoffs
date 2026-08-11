@@ -3,9 +3,30 @@
   "title": "UI capture environment profiles",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "profiles"],
+  "required": ["schemaVersion", "acceptancePolicy", "profiles"],
   "properties": {
     "schemaVersion": { "const": "1.0.0" },
+    "acceptancePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "canonicalPurpose", "canonicalEnvironmentMustBeLocked", "scoreOnlyCanonical",
+        "requiredStabilityPurposes", "stabilityProfilesAffectReplicaScore"
+      ],
+      "properties": {
+        "canonicalPurpose": { "const": "baseline" },
+        "canonicalEnvironmentMustBeLocked": { "const": true },
+        "scoreOnlyCanonical": { "const": true },
+        "requiredStabilityPurposes": {
+          "type": "array",
+          "prefixItems": [{ "const": "wide" }, { "const": "narrow" }, { "const": "zoom" }],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "stabilityProfilesAffectReplicaScore": { "const": false }
+      }
+    },
     "profiles": {
       "type": "array",
       "minItems": 1,
@@ -21,7 +42,13 @@
       "additionalProperties": false,
       "required": [
         "captureProfileId",
+        "pageId",
+        "stateId",
+        "variantId",
         "purpose",
+        "acceptanceRole",
+        "scoreContribution",
+        "environmentLock",
         "targetPlatform",
         "layoutPolicy",
         "browser",
@@ -40,7 +67,26 @@
       ],
       "properties": {
         "captureProfileId": { "type": "string", "minLength": 1 },
+        "pageId": { "type": "string", "pattern": "^P[0-9]{3,}$" },
+        "stateId": { "type": "string", "pattern": "^S[0-9]{2,}$" },
+        "variantId": { "type": "string", "pattern": "^V[0-9]{2,}$" },
         "purpose": { "enum": ["baseline", "wide", "narrow", "zoom", "custom"] },
+        "acceptanceRole": { "enum": ["replica-score", "stability-only", "custom"] },
+        "scoreContribution": { "type": "boolean" },
+        "environmentLock": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["viewport", "zoom", "dpr", "browser", "browserVersion", "locale", "fonts"],
+          "properties": {
+            "viewport": { "type": "boolean" },
+            "zoom": { "type": "boolean" },
+            "dpr": { "type": "boolean" },
+            "browser": { "type": "boolean" },
+            "browserVersion": { "type": "boolean" },
+            "locale": { "type": "boolean" },
+            "fonts": { "type": "boolean" }
+          }
+        },
         "targetPlatform": {
           "enum": ["desktop-web", "mobile-web", "responsive-web", "desktop-native", "unknown"]
         },
@@ -83,6 +129,41 @@
         }
       },
       "allOf": [
+        {
+          "if": {
+            "properties": { "purpose": { "const": "baseline" } },
+            "required": ["purpose"]
+          },
+          "then": {
+            "properties": {
+              "acceptanceRole": { "const": "replica-score" },
+              "scoreContribution": { "const": true },
+              "environmentLock": {
+                "properties": {
+                  "viewport": { "const": true },
+                  "zoom": { "const": true },
+                  "dpr": { "const": true },
+                  "browser": { "const": true },
+                  "browserVersion": { "const": true },
+                  "locale": { "const": true },
+                  "fonts": { "const": true }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "purpose": { "enum": ["wide", "narrow", "zoom"] } },
+            "required": ["purpose"]
+          },
+          "then": {
+            "properties": {
+              "acceptanceRole": { "const": "stability-only" },
+              "scoreContribution": { "const": false }
+            }
+          }
+        },
         {
           "if": {
             "anyOf": [

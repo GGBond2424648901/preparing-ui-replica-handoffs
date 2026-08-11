@@ -179,3 +179,23 @@ ruleId: CS-029
 ruleId: CS-030
 
 颜色相同不代表语义相同：优先级 P0 的红色、错误反馈红色和阻塞状态红色保持独立 Token 与含义，除非权威设计语言图明确要求统一。不同维度禁止互相推断顺序或状态；未展示的 P3、成功、离线、AI 失败等只能作为检查清单，不能生成正式值。每个页面通过 `semanticDimensionIds`/`semanticValueIds` 声明实际使用项，并在 `semanticTargets` 中做颜色、几何和对比度 Diff。
+
+sectionId: shared-shell-runtime
+
+## 共享 Shell 运行时组件
+
+ruleId: CS-031
+
+每个获批 Shell 家族登记一个布局组件；存在导航时，再登记一套规范导航组件。Shell 统一管理 Sidebar、TopBar、工作区背景、全局内边距、折叠状态、滚动归属和 Router Outlet；页面组件只能挂载在 Outlet 中，不得包含第二套 Shell。
+
+ruleId: CS-032
+
+每个 Shell 只使用一个导航注册表，统一提供标题、图标、顺序、层级、路由、权限和徽标。权限处理只能过滤规范导航树，不能生成页面专属菜单；激活状态必须来自 Router 位置，不得来自页面局部状态。
+
+ruleId: CS-033
+
+Shell 几何使用 Grid/Flex 和 `minmax(0, 1fr)` 或等价真实布局实现，并把侧栏、顶栏、内容内边距冻结为共享 Token。页面根节点使用 `width: 100%` 和 `min-width: 0`，不得整体缩放，也不得补偿全局侧栏偏移。
+
+ruleId: CS-034
+
+每个可复用组件必须记录最小/基准/最大尺寸、伸缩行为、换行策略、滚动所有者和有效视口缩放行为。浏览器缩放按更窄的 CSS 视口处理：先缩至收缩下限，再使用有证据的局部滚动或获批重排，同时保持控件可达。

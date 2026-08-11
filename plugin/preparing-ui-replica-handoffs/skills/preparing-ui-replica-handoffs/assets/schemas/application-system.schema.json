@@ -6,7 +6,8 @@
   "required": [
     "schemaVersion", "applicationId", "integrationMode", "runtimeMode", "portPolicy",
     "port", "router", "defaultRoute", "routeEntries", "shellFamilies", "navigation",
-    "sharedState", "sharedComponents", "implementationSequence", "status", "evidenceLevel", "gapIds"
+    "sharedState", "sharedComponents", "visualAcceptancePolicy", "implementationSequence",
+    "status", "evidenceLevel", "gapIds"
   ],
   "properties": {
     "schemaVersion": { "const": "1.0.0" },
@@ -19,31 +20,174 @@
     "defaultRoute": { "type": ["string", "null"] },
     "routeEntries": {
       "type": "array",
-      "items": {
-        "type": "object", "additionalProperties": false,
-        "required": ["pageId", "stateId", "variantId", "path", "shellId", "navigationEntryId", "status", "evidenceLevel", "gapIds"],
-        "properties": {
-          "pageId": { "type": "string", "pattern": "^P[0-9]{3,}$" },
-          "stateId": { "type": "string", "pattern": "^S[0-9]{2,}$" },
-          "variantId": { "type": "string", "pattern": "^V[0-9]{2,}$" },
-          "path": { "type": ["string", "null"] }, "shellId": { "type": ["string", "null"] },
-          "navigationEntryId": { "type": ["string", "null"] },
-          "status": { "enum": ["unknown", "proposed", "candidate", "approved"] },
-          "evidenceLevel": { "enum": ["direct", "derived", "candidate", "approved", "unknown"] },
-          "gapIds": { "$ref": "#/$defs/gapIds" }
-        }
-      }
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/routeEntry" }
     },
-    "shellFamilies": { "type": "array", "items": { "type": "object" } },
-    "navigation": { "type": "object" },
-    "sharedState": { "type": "object" },
-    "sharedComponents": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
-    "implementationSequence": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-    "status": { "enum": ["unknown", "proposed", "candidate", "approved"] },
-    "evidenceLevel": { "enum": ["direct", "derived", "candidate", "approved", "unknown"] },
+    "shellFamilies": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/shellFamily" }
+    },
+    "navigation": { "$ref": "#/$defs/navigationPolicy" },
+    "sharedState": { "$ref": "#/$defs/sharedState" },
+    "sharedComponents": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "visualAcceptancePolicy": { "$ref": "#/$defs/visualAcceptancePolicy" },
+    "implementationSequence": {
+      "type": "array",
+      "minItems": 5,
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "status": { "$ref": "#/$defs/status" },
+    "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
     "gapIds": { "$ref": "#/$defs/gapIds" }
   },
   "$defs": {
-    "gapIds": { "type": "array", "items": { "type": "string", "pattern": "^G[0-9]{3,}$" }, "uniqueItems": true }
+    "status": { "enum": ["unknown", "proposed", "candidate", "approved"] },
+    "evidenceLevel": { "enum": ["direct", "derived", "candidate", "approved", "unknown"] },
+    "systemLayer": { "enum": ["front-office", "middle-office", "back-office", "auth-public", "unclassified"] },
+    "gapIds": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^G[0-9]{3,}$" },
+      "uniqueItems": true
+    },
+    "routeEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pageId", "stateId", "variantId", "path", "shellId", "navigationSystemId",
+        "activeNavigationEntryId", "shellInheritanceMode", "inheritedRegionIds",
+        "pageOwnedRegionIds", "status", "evidenceLevel", "gapIds"
+      ],
+      "properties": {
+        "pageId": { "type": "string", "pattern": "^P[0-9]{3,}$" },
+        "stateId": { "type": "string", "pattern": "^S[0-9]{2,}$" },
+        "variantId": { "type": "string", "pattern": "^V[0-9]{2,}$" },
+        "path": { "type": ["string", "null"] },
+        "shellId": { "type": ["string", "null"] },
+        "navigationSystemId": { "type": ["string", "null"], "pattern": "^NAV[0-9]{3,}$" },
+        "activeNavigationEntryId": { "type": ["string", "null"], "pattern": "^NAVITEM[0-9]{3,}$" },
+        "shellInheritanceMode": { "enum": ["shared-shell", "shellless", "unclassified"] },
+        "inheritedRegionIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "pageOwnedRegionIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "status": { "$ref": "#/$defs/status" },
+        "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
+        "gapIds": { "$ref": "#/$defs/gapIds" }
+      }
+    },
+    "shellFamily": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shellId", "systemLayer", "navigationSystemId", "routePrefixes",
+        "layoutComponentId", "navigationComponentId", "implementationTarget",
+        "reuseMode", "globalOffsetOwner", "geometryPolicy", "scrollOwnership",
+        "zoomBehavior", "status", "evidenceLevel", "gapIds"
+      ],
+      "properties": {
+        "shellId": { "type": "string", "minLength": 1 },
+        "systemLayer": { "$ref": "#/$defs/systemLayer" },
+        "navigationSystemId": { "type": ["string", "null"], "pattern": "^NAV[0-9]{3,}$" },
+        "routePrefixes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "layoutComponentId": { "type": ["string", "null"] },
+        "navigationComponentId": { "type": ["string", "null"] },
+        "implementationTarget": { "type": ["string", "null"] },
+        "reuseMode": { "enum": ["single-shared-instance", "shellless", "unclassified"] },
+        "globalOffsetOwner": { "enum": ["shell", "none", "unclassified"] },
+        "geometryPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sidebarWidthToken", "collapsedSidebarWidthToken", "topbarHeightToken",
+            "contentInsetToken", "referenceWidthTolerancePx", "crossRouteRuntimeTolerancePx",
+            "propagateReferenceOffsetToContentDiff"
+          ],
+          "properties": {
+            "sidebarWidthToken": { "type": ["string", "null"] },
+            "collapsedSidebarWidthToken": { "type": ["string", "null"] },
+            "topbarHeightToken": { "type": ["string", "null"] },
+            "contentInsetToken": { "type": ["string", "null"] },
+            "referenceWidthTolerancePx": { "type": ["number", "null"], "minimum": 0 },
+            "crossRouteRuntimeTolerancePx": { "const": 0 },
+            "propagateReferenceOffsetToContentDiff": { "const": false }
+          }
+        },
+        "scrollOwnership": { "enum": ["page", "region", "hybrid", "unclassified"] },
+        "zoomBehavior": { "enum": ["effective-viewport", "preserve-layout", "unclassified"] },
+        "status": { "$ref": "#/$defs/status" },
+        "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
+        "gapIds": { "$ref": "#/$defs/gapIds" }
+      }
+    },
+    "navigationPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registryMode", "activeStateSource", "permissionMode", "pageLocalNavigationPolicy",
+        "crossRouteShellPersistence", "status", "gapIds"
+      ],
+      "properties": {
+        "registryMode": { "enum": ["one-canonical-registry-per-shell", "unclassified"] },
+        "activeStateSource": { "enum": ["router-location", "unclassified"] },
+        "permissionMode": { "enum": ["filter-canonical-tree", "none", "unclassified"] },
+        "pageLocalNavigationPolicy": { "const": "forbidden" },
+        "crossRouteShellPersistence": { "enum": ["required", "shellless", "unclassified"] },
+        "status": { "$ref": "#/$defs/status" },
+        "gapIds": { "$ref": "#/$defs/gapIds" }
+      }
+    },
+    "sharedState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["routeStateOwner", "shellStateOwner", "navigationStateOwner", "status", "gapIds"],
+      "properties": {
+        "routeStateOwner": { "enum": ["router", "unclassified"] },
+        "shellStateOwner": { "enum": ["application-shell", "none", "unclassified"] },
+        "navigationStateOwner": { "enum": ["canonical-navigation-registry", "none", "unclassified"] },
+        "status": { "$ref": "#/$defs/status" },
+        "gapIds": { "$ref": "#/$defs/gapIds" }
+      }
+    },
+    "visualAcceptancePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "canonicalProfilePurpose", "canonicalZoomRequired", "scoreOnlyCanonicalProfile",
+        "nonCanonicalPurposes", "nonCanonicalAcceptance", "regionAwareDiff",
+        "navigationReferenceToleranceMode", "crossRouteShellDriftTolerancePx"
+      ],
+      "properties": {
+        "canonicalProfilePurpose": { "const": "baseline" },
+        "canonicalZoomRequired": { "const": true },
+        "scoreOnlyCanonicalProfile": { "const": true },
+        "nonCanonicalPurposes": {
+          "type": "array",
+          "prefixItems": [{ "const": "wide" }, { "const": "narrow" }, { "const": "zoom" }],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "nonCanonicalAcceptance": { "const": "stability-only" },
+        "regionAwareDiff": { "const": true },
+        "navigationReferenceToleranceMode": { "const": "explicit-region-geometry-tolerance" },
+        "crossRouteShellDriftTolerancePx": { "const": 0 }
+      }
+    }
   }
 }

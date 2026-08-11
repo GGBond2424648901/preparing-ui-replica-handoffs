@@ -81,6 +81,9 @@ CSV_FIELDS = {
         "stateId",
         "variantId",
         "captureProfileId",
+        "capturePurpose",
+        "acceptanceRole",
+        "scoreContribution",
         "regionId",
         "evidenceType",
         "referencePath",
@@ -1083,7 +1086,10 @@ def _check_bilingual(handoff_root: Path, issues: list[dict]) -> None:
 
 def _check_capture_profiles(documents: dict[str, dict], issues: list[dict]) -> None:
     capture = documents.get("contracts/capture-profile.json") or {}
-    for profile in capture.get("profiles", []):
+    profiles = [profile for profile in capture.get("profiles", []) if isinstance(profile, dict)]
+    profiles_by_identity: dict[tuple[object, object, object], list[dict]] = {}
+    for profile in profiles:
+        profiles_by_identity.setdefault(_identity(profile), []).append(profile)
         if not isinstance(profile, dict):
             continue
         scalar_fields = ("browser", "browserVersion", "locale", "timezone")
@@ -1110,6 +1116,298 @@ def _check_capture_profiles(documents: dict[str, dict], issues: list[dict]) -> N
                     captureProfileId=profile.get("captureProfileId"),
                 )
             )
+
+        purpose = profile.get("purpose")
+        if purpose == "baseline":
+            if profile.get("acceptanceRole") != "replica-score" or profile.get("scoreContribution") is not True:
+                issues.append(
+                    _issue(
+                        "CANONICAL_PROFILE_NOT_SCORING",
+                        "contracts/capture-profile.json",
+                        "the fixed-environment baseline profile is the only profile allowed to contribute to replica similarity scoring",
+                        captureProfileId=profile.get("captureProfileId"),
+                    )
+                )
+            environment_lock = profile.get("environmentLock") or {}
+            if not environment_lock or not all(value is True for value in environment_lock.values()):
+                issues.append(
+                    _issue(
+                        "CANONICAL_ENVIRONMENT_NOT_LOCKED",
+                        "contracts/capture-profile.json",
+                        "baseline replica scoring requires locked viewport, zoom, DPR, browser, browser version, locale, and fonts",
+                        captureProfileId=profile.get("captureProfileId"),
+                    )
+                )
+        elif purpose in {"wide", "narrow", "zoom"}:
+            if profile.get("acceptanceRole") != "stability-only" or profile.get("scoreContribution") is not False:
+                issues.append(
+                    _issue(
+                        "STABILITY_PROFILE_AFFECTS_REPLICA_SCORE",
+                        "contracts/capture-profile.json",
+                        "wide, narrow, and zoom profiles validate stability only and must not affect the canonical replica score",
+                        captureProfileId=profile.get("captureProfileId"),
+                    )
+                )
+
+    pages = [
+        page
+        for page in (documents.get("contracts/page-inventory.json") or {}).get("pages", [])
+        if isinstance(page, dict) and page.get("status") == "approved"
+    ]
+    required_purposes = {"baseline", "wide", "narrow", "zoom"}
+    for page in pages:
+        identity = _identity(page)
+        purposes = {profile.get("purpose") for profile in profiles_by_identity.get(identity, [])}
+        missing = sorted(required_purposes - purposes)
+        if missing:
+            issues.append(
+                _issue(
+                    "APPROVED_PAGE_CAPTURE_PURPOSE_MISSING",
+                    "contracts/capture-profile.json",
+                    "approved pages require baseline scoring plus wide, narrow, and zoom stability profiles",
+                    identity=_identity_text(identity),
+                    missingPurposes=missing,
+                )
+            )
+
+
+def _check_application_system(documents: dict[str, dict], issues: list[dict]) -> None:
+    application = documents.get("contracts/application-system.json") or {}
+    pages = [
+        page
+        for page in (documents.get("contracts/page-inventory.json") or {}).get("pages", [])
+        if isinstance(page, dict)
+    ]
+    navigation_systems = {
+        item.get("navigationSystemId"): item
+        for item in (documents.get("contracts/navigation-reconciliation.json") or {}).get("navigationSystems", [])
+        if isinstance(item, dict) and item.get("navigationSystemId")
+    }
+    shell_families = {
+        item.get("shellId"): item
+        for item in application.get("shellFamilies", [])
+        if isinstance(item, dict) and item.get("shellId")
+    }
+    components = {
+        item.get("componentId"): item
+        for item in (documents.get("contracts/component-registry.json") or {}).get("components", [])
+        if isinstance(item, dict) and item.get("componentId")
+    }
+    route_entries = [item for item in application.get("routeEntries", []) if isinstance(item, dict)]
+    implementation_plan = documents.get("contracts/implementation-plan.json") or {}
+    system_work_items = {
+        item.get("systemWorkItemId"): item
+        for item in implementation_plan.get("systemWorkItems", [])
+        if isinstance(item, dict) and item.get("systemWorkItemId")
+    }
+    required_system_kinds = {
+        "classify-shells", "freeze-navigation", "build-router-shells", "verify-shell-route-smoke"
+    }
+    present_system_kinds = {item.get("kind") for item in system_work_items.values()}
+    if required_system_kinds - present_system_kinds:
+        issues.append(
+            _issue(
+                "SYSTEM_FIRST_WORK_ITEMS_MISSING",
+                "contracts/implementation-plan.json",
+                "shell classification, navigation freeze, router/shell construction, and representative route smoke verification must precede page work",
+                missingKinds=sorted(required_system_kinds - present_system_kinds),
+            )
+        )
+    for work_item in implementation_plan.get("pageWorkItems", []):
+        if not isinstance(work_item, dict):
+            continue
+        if work_item.get("implementationBoundary") != "page-content-only" or "SW004" not in work_item.get("dependencies", []):
+            issues.append(
+                _issue(
+                    "PAGE_WORK_BYPASSES_SHARED_SHELL_FOUNDATION",
+                    "contracts/implementation-plan.json",
+                    "page work must depend on representative shared-shell route verification and implement page content only",
+                    workItemId=work_item.get("workItemId"),
+                )
+            )
+        if work_item.get("status") == "accepted" and any(
+            item.get("status") != "accepted" for item in system_work_items.values()
+        ):
+            issues.append(
+                _issue(
+                    "PAGE_ACCEPTED_BEFORE_SYSTEM_FOUNDATION",
+                    "contracts/implementation-plan.json",
+                    "no page can be accepted before every system-first shell and navigation work item is accepted",
+                    workItemId=work_item.get("workItemId"),
+                )
+            )
+
+    paths: dict[str, tuple[object, object, object]] = {}
+    for entry in route_entries:
+        path = entry.get("path")
+        if isinstance(path, str) and path:
+            if path in paths:
+                issues.append(
+                    _issue(
+                        "APPLICATION_ROUTE_DUPLICATE",
+                        "contracts/application-system.json",
+                        "route paths must be unique in the single application router",
+                        path=path,
+                        firstIdentity=_identity_text(paths[path]),
+                        secondIdentity=_identity_text(_identity(entry)),
+                    )
+                )
+            paths[path] = _identity(entry)
+
+    page_by_identity = {_identity(page): page for page in pages}
+    for entry in route_entries:
+        identity = _identity(entry)
+        page = page_by_identity.get(identity)
+        if page is None:
+            continue
+        page_shell = page.get("shell") or {}
+        for field, page_field in (
+            ("shellId", "shellId"),
+            ("navigationSystemId", "navigationSystemId"),
+            ("activeNavigationEntryId", "activeNavigationEntryId"),
+        ):
+            if entry.get(field) != page_shell.get(page_field):
+                issues.append(
+                    _issue(
+                        "PAGE_APPLICATION_SHELL_BINDING_MISMATCH",
+                        "contracts/application-system.json",
+                        "page and application route entries must reference the same shared shell and navigation binding",
+                        identity=_identity_text(identity),
+                        field=field,
+                    )
+                )
+
+    pages_by_shell: dict[str, list[dict]] = {}
+    for page in pages:
+        shell = page.get("shell") or {}
+        shell_id = shell.get("shellId")
+        if isinstance(shell_id, str):
+            pages_by_shell.setdefault(shell_id, []).append(page)
+        navigation_system_id = shell.get("navigationSystemId")
+        if navigation_system_id not in navigation_systems:
+            issues.append(
+                _issue(
+                    "PAGE_CANONICAL_NAVIGATION_BINDING_MISSING",
+                    "contracts/page-inventory.json",
+                    "every page must bind to the canonical navigation system for its shell",
+                    identity=_identity_text(_identity(page)),
+                    navigationSystemId=navigation_system_id,
+                )
+            )
+
+    for shell_id, shell_pages in pages_by_shell.items():
+        navigation_ids = {(page.get("shell") or {}).get("navigationSystemId") for page in shell_pages}
+        if len(navigation_ids) > 1:
+            issues.append(
+                _issue(
+                    "PAGE_LOCAL_NAVIGATION_ANTIPATTERN",
+                    "contracts/page-inventory.json",
+                    "pages in one shell family must share one canonical navigation system instead of page-local copies",
+                    shellId=shell_id,
+                    navigationSystemIds=sorted(str(value) for value in navigation_ids),
+                )
+            )
+
+    for shell_id, shell in shell_families.items():
+        navigation_system_id = shell.get("navigationSystemId")
+        navigation_system = navigation_systems.get(navigation_system_id)
+        if isinstance(navigation_system, dict) and navigation_system.get("shellId") != shell_id:
+            issues.append(
+                _issue(
+                    "SHELL_NAVIGATION_OWNER_MISMATCH",
+                    "contracts/application-system.json",
+                    "a canonical navigation system must belong to the same shell family that references it",
+                    shellId=shell_id,
+                    navigationSystemId=navigation_system_id,
+                )
+            )
+
+    if application.get("status") == "approved":
+        for entry in route_entries:
+            missing = [
+                field for field in ("path", "shellId", "navigationSystemId", "activeNavigationEntryId")
+                if not entry.get(field)
+            ]
+            if entry.get("shellInheritanceMode") not in {"shared-shell", "shellless"}:
+                missing.append("shellInheritanceMode")
+            if missing:
+                issues.append(
+                    _issue(
+                        "APPROVED_ROUTE_SHELL_BINDING_INCOMPLETE",
+                        "contracts/application-system.json",
+                        "approved routes require a concrete path, shared shell, canonical navigation, and active entry",
+                        identity=_identity_text(_identity(entry)),
+                        missingFields=sorted(set(missing)),
+                    )
+                )
+            navigation_system = navigation_systems.get(entry.get("navigationSystemId")) or {}
+            canonical_entries = {
+                item.get("navigationEntryId"): item
+                for item in navigation_system.get("canonicalEntries", [])
+                if isinstance(item, dict) and item.get("navigationEntryId")
+            }
+            active_entry = canonical_entries.get(entry.get("activeNavigationEntryId"))
+            if not active_entry:
+                issues.append(
+                    _issue(
+                        "APPROVED_ROUTE_ACTIVE_NAVIGATION_MISSING",
+                        "contracts/application-system.json",
+                        "the approved route active item must resolve in its shell canonical navigation tree",
+                        identity=_identity_text(_identity(entry)),
+                        activeNavigationEntryId=entry.get("activeNavigationEntryId"),
+                    )
+                )
+            elif active_entry.get("targetRoute") != entry.get("path"):
+                issues.append(
+                    _issue(
+                        "APPROVED_ROUTE_NAVIGATION_TARGET_MISMATCH",
+                        "contracts/application-system.json",
+                        "the canonical navigation target route must match the unified Router entry",
+                        identity=_identity_text(_identity(entry)),
+                        path=entry.get("path"),
+                        navigationTarget=active_entry.get("targetRoute"),
+                    )
+                )
+        for shell_id, shell in shell_families.items():
+            required_values = (
+                shell.get("systemLayer"), shell.get("layoutComponentId"),
+                shell.get("implementationTarget"), shell.get("reuseMode"),
+                shell.get("globalOffsetOwner"), shell.get("scrollOwnership"), shell.get("zoomBehavior"),
+            )
+            geometry = shell.get("geometryPolicy") or {}
+            if (
+                shell.get("status") != "approved"
+                or any(value in (None, "unclassified") for value in required_values)
+                or geometry.get("referenceWidthTolerancePx") is None
+            ):
+                issues.append(
+                    _issue(
+                        "APPROVED_SHELL_CONTRACT_INCOMPLETE",
+                        "contracts/application-system.json",
+                        "approved applications require substantive front/middle/back shell contracts and explicit reference-width tolerance",
+                        shellId=shell_id,
+                    )
+                )
+            for field in ("layoutComponentId", "navigationComponentId"):
+                component_id = shell.get(field)
+                if component_id is None and field == "navigationComponentId" and shell.get("systemLayer") == "auth-public":
+                    continue
+                component = components.get(component_id)
+                if (
+                    not isinstance(component, dict)
+                    or component.get("ownershipScope") != "shared-shell"
+                    or shell_id not in component.get("shellIds", [])
+                ):
+                    issues.append(
+                        _issue(
+                            "APPROVED_SHELL_COMPONENT_BINDING_INVALID",
+                            "contracts/application-system.json",
+                            "approved shell layout/navigation components must resolve to shared-shell registry entries",
+                            shellId=shell_id,
+                            field=field,
+                            componentId=component_id,
+                        )
+                    )
 
 
 def _check_required_collections(
@@ -1877,13 +2175,24 @@ def _check_implementation_coverage(
         raw_target_files = mapping.get("targetFiles")
         target_files_valid = _unique_nonempty_strings(raw_target_files)
         target_files = set(raw_target_files) if target_files_valid else set()
+        raw_shell_owned_files = mapping.get("shellOwnedTargetFiles")
+        shell_owned_files_valid = _unique_nonempty_strings(raw_shell_owned_files)
+        shell_owned_files = (
+            set(raw_shell_owned_files) if shell_owned_files_valid else set()
+        )
         region_mappings = mapping.get("regionMappings")
         component_mappings = mapping.get("componentMappings")
-        expected_regions = {
+        all_page_regions = {
             region.get("regionId")
             for region in page.get("regions", [])
             if isinstance(region, dict) and region.get("regionId")
         }
+        shell_contract = page.get("shell") if isinstance(page.get("shell"), dict) else {}
+        inherited_regions = set(shell_contract.get("inheritedRegionIds") or [])
+        declared_page_owned_regions = set(shell_contract.get("pageOwnedRegionIds") or [])
+        expected_regions = declared_page_owned_regions or (
+            all_page_regions - inherited_regions
+        )
         expected_components = {
             (component.get("instanceId"), component.get("componentId"))
             for component in page.get("components", [])
@@ -1935,6 +2244,20 @@ def _check_implementation_coverage(
                     "IMPLEMENTATION_MAPPING_COVERAGE_MISMATCH",
                     "contracts/implementation-map.json",
                     "approved region/component mappings must exactly and uniquely cover the page contract and target approved files",
+                    identity=_identity_text(identity),
+                )
+            )
+        if (
+            mapping.get("implementationBoundary") != "page-content-only"
+            or not shell_owned_files_valid
+            or bool(target_files & shell_owned_files)
+            or bool(set(actual_regions) & inherited_regions)
+        ):
+            issues.append(
+                _issue(
+                    "PAGE_IMPLEMENTATION_OWNS_SHELL",
+                    "contracts/implementation-map.json",
+                    "approved page implementation must own page content only; shell/navigation files and inherited regions remain shell-owned",
                     identity=_identity_text(identity),
                 )
             )
@@ -3250,11 +3573,12 @@ def _check_diff_and_qa(
 ) -> None:
     diff = documents.get("contracts/diff-regions.json") or {}
     capture = documents.get("contracts/capture-profile.json") or {}
-    capture_profile_ids = {
-        profile.get("captureProfileId")
+    capture_profiles = {
+        profile.get("captureProfileId"): profile
         for profile in capture.get("profiles", [])
-        if isinstance(profile, dict)
+        if isinstance(profile, dict) and profile.get("captureProfileId")
     }
+    capture_profile_ids = set(capture_profiles)
     diff_by_identity = {
         _identity(page): page
         for page in diff.get("pages", [])
@@ -3303,6 +3627,20 @@ def _check_diff_and_qa(
                         f"diff region is not passed for {identity_name}",
                     )
                 )
+            if region.get("regionRole") == "shell-navigation" and region.get("geometryTolerancePx", 0) > 0:
+                if (
+                    region.get("alignmentAnchor") != "navigation-content-divider"
+                    or region.get("propagateGeometryOffset") is not False
+                ):
+                    issues.append(
+                        _issue(
+                            "NAVIGATION_REFERENCE_TOLERANCE_NOT_ANCHORED",
+                            "contracts/diff-regions.json",
+                            "navigation reference-width tolerance requires divider anchoring and must not propagate into page-content Diff",
+                            identity=identity_name,
+                            regionId=region.get("regionId"),
+                        )
+                    )
         if not diff_complete:
             issues.append(
                 _issue(
@@ -3327,12 +3665,28 @@ def _check_diff_and_qa(
             )
         for row in matching_qa:
             qa_capture_profile_id = row.get("captureProfileId")
+            profile = capture_profiles.get(qa_capture_profile_id) or {}
             if qa_capture_profile_id not in capture_profile_ids:
                 issues.append(
                     _issue(
                         "QA_CAPTURE_PROFILE_MISSING",
                         "contracts/visual-qa-matrix.csv",
                         f"QA row {row.get('qaId')} references a missing capture profile",
+                        captureProfileId=qa_capture_profile_id,
+                    )
+                )
+            if (
+                row.get("capturePurpose") != profile.get("purpose")
+                or row.get("acceptanceRole") != profile.get("acceptanceRole")
+                or str(row.get("scoreContribution", "")).lower()
+                != str(profile.get("scoreContribution", "")).lower()
+            ):
+                issues.append(
+                    _issue(
+                        "QA_CAPTURE_ACCEPTANCE_ROLE_MISMATCH",
+                        "contracts/visual-qa-matrix.csv",
+                        "QA rows must preserve the capture profile purpose, acceptance role, and replica-score contribution",
+                        qaId=row.get("qaId"),
                         captureProfileId=qa_capture_profile_id,
                     )
                 )
@@ -3871,6 +4225,7 @@ def validate_handoff(
             _check_page_documents(handoff_root, documents, issues)
             _check_bilingual(handoff_root, issues)
             _check_capture_profiles(documents, issues)
+            _check_application_system(documents, issues)
             _check_diff_and_qa(documents, qa_rows, identities, issues)
             gap_rows = csv_documents.get("contracts/gap-register.csv")
             _check_qa_evidence_records(

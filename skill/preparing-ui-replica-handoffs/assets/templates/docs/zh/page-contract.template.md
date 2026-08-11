@@ -41,6 +41,8 @@ sectionId: application-integration
 
 {{applicationIntegration}}
 
+页面必须声明所属前台/中台/后台/公开认证 `shellId`、规范 `navigationSystemId`、从路由推导的 `activeNavigationEntryId`、继承的 Shell 区域和页面自有内容区域。Sidebar、TopBar、工作区背景、全局偏移和导航状态均由共享 Shell 继承，本页不得重复实现。
+
 sectionId: qa-and-gaps
 
 ## QA 与缺口

@@ -123,3 +123,15 @@ sectionId: navigation-authority
 ruleId: IA-020
 
 Before page implementation, observe every navigation label, icon, order, parent hierarchy, route, selected state, and role/permission visibility across references. Record omissions, extras, label/icon/order/parent/route/visibility differences in `navigation-reconciliation.json`; an approved canonical navigation tree with `freezeStatus: approved` is required before page approval.
+
+ruleId: IA-021
+
+Before navigation freeze, classify every page into an evidenced front-, middle-, back-office, public/auth, or shellless family. Similar Sidebar, TopBar, Logo, user area, content origin, route namespace, and permission context are shell-family evidence. Unknown membership remains a blocking gap; never resolve uncertainty by creating one shell or navigation system per screenshot.
+
+sectionId: canonical-capture-authority
+
+## Canonical capture and tolerance authority
+
+ruleId: IA-022
+
+Intake must record the exact browser zoom used for final replica scoring together with viewport, DPR, browser/version, locale, theme, and fonts. Also record any user-approved navigation reference-width tolerance caused by generated-design variance. These are approval facts, not inferred defaults; wide/narrow/zoom stability profiles remain separate and do not affect replica percentage.

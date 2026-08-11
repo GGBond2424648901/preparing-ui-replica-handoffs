@@ -196,17 +196,48 @@
         "shell": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["shellId", "evidenceLevel", "gapId"],
+          "required": [
+            "shellId", "systemLayer", "navigationSystemId", "activeNavigationEntryId",
+            "inheritanceMode", "inheritedRegionIds", "pageOwnedRegionIds",
+            "globalOffsetOwner", "evidenceLevel", "gapId"
+          ],
           "properties": {
             "shellId": { "type": "string", "minLength": 1 },
+            "systemLayer": { "enum": ["front-office", "middle-office", "back-office", "auth-public", "unclassified"] },
+            "navigationSystemId": { "type": ["string", "null"], "pattern": "^NAV[0-9]{3,}$" },
+            "activeNavigationEntryId": { "type": ["string", "null"], "pattern": "^NAVITEM[0-9]{3,}$" },
+            "inheritanceMode": { "enum": ["shared-shell", "shellless", "unclassified"] },
+            "inheritedRegionIds": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "uniqueItems": true
+            },
+            "pageOwnedRegionIds": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "uniqueItems": true
+            },
+            "globalOffsetOwner": { "enum": ["shell", "none", "unclassified"] },
             "evidenceLevel": { "$ref": "#/$defs/evidenceLevel" },
             "gapId": { "type": ["string", "null"], "pattern": "^G[0-9]{3,}$" }
           },
           "allOf": [
             {
               "if": {
-                "properties": { "evidenceLevel": { "const": "unknown" } },
-                "required": ["evidenceLevel"]
+                "anyOf": [
+                  {
+                    "properties": { "evidenceLevel": { "const": "unknown" } },
+                    "required": ["evidenceLevel"]
+                  },
+                  {
+                    "properties": { "systemLayer": { "const": "unclassified" } },
+                    "required": ["systemLayer"]
+                  },
+                  {
+                    "properties": { "inheritanceMode": { "const": "unclassified" } },
+                    "required": ["inheritanceMode"]
+                  }
+                ]
               },
               "then": { "properties": { "gapId": { "type": "string" } } }
             }

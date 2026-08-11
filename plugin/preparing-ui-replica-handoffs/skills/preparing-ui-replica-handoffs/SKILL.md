@@ -1,6 +1,6 @@
 ---
 name: preparing-ui-replica-handoffs
-description: "Use when screenshots, Figma exports, generated mockups, UI design-language boards, component/brand/state/motion boards, or approved UI images must become precise bilingual, evidence-bounded, desktop-Web-first UI replica handoff contracts for a downstream Agent."
+description: "Use when screenshots, Figma exports, generated mockups, or UI design-system boards must become precise bilingual desktop-Web replica handoffs, especially for multi-page front/middle/back-office shells, shared navigation, browser-zoom adaptation, and fixed-environment visual acceptance."
 ---
 
 # Preparing UI Replica Handoffs / UI 复刻交付准备
@@ -10,6 +10,11 @@ Create a self-contained, bilingual handoff package that lets a downstream UI Age
 This skill is independent. Do not call, require, or route work through `design-image-to-web-replica`; ordinary image inspection, document, browser, and filesystem tools may be used when available. 本技能不依赖其他 UI 复刻技能。
 
 ## Non-negotiables / 不可协商规则
+
+- Classify every page into an evidenced `front-office`, `middle-office`, `back-office`, or `auth-public` shell family before freezing navigation. Freeze at most one canonical navigation system per shell family. Pages inherit Sidebar, TopBar, workspace background, global offsets, route state, and navigation state from that shared shell and implement page content only. A screenshot may prove shell appearance, but it never authorizes a page-local shell or navigation copy. 冻结导航前必须先把页面归入有证据的前台、中台、后台或公开/认证 Shell；每个 Shell 最多冻结一套规范导航。页面只实现内容区，侧栏、顶栏、工作区背景、全局偏移、路由状态和导航状态均由共享 Shell 继承；截图能证明 Shell 外观，但不能授权逐页复制 Shell 或导航。
+- Build the single Router, shared shell components, canonical navigation registries, and one representative route per shell before page-by-page implementation. Navigation integration is a foundation gate, not a final stitching phase. The Shell alone owns sidebar width and content origin; pages must not compensate with global `margin-left`, `padding-left`, `100vw - sidebarWidth`, or equivalent offsets. 统一 Router、共享 Shell、规范导航注册表及每个 Shell 的代表路由必须先于逐页实现完成；导航集成是基础门禁，不是最终拼接阶段。只有 Shell 管理侧栏宽度和内容起点，页面不得再用全局 `margin-left`、`padding-left`、`100vw - sidebarWidth` 等方式补偿。
+- Separate canonical replica scoring from adaptive stability acceptance. Replica percentage is computed only from the approved baseline profile captured at the exact required viewport, browser zoom, DPR, browser/version, locale, and font environment. Wide, narrow, and zoom profiles verify reachability, layout stability, overflow ownership, and component adaptation only; they never change the canonical replica score. 复刻百分比与自适应稳定性必须分开：只有在规定视口、浏览器缩放比例、DPR、浏览器/版本、语言环境和字体环境完全锁定的基准 profile 中计算复刻分数；宽屏、窄屏和缩放 profile 只验证可达性、布局稳定、滚动归属和组件适应，不参与基准复刻评分。
+- Compare navigation and page content as anchored regions when reference-generation variance makes sidebar width uncertain. Record an explicit navigation reference-width tolerance; do not propagate an accepted sidebar-width difference into the page-content Diff. Runtime tolerance across routes remains zero: every page in one shell uses the same frozen width token and shell DOM/geometry. 当设计稿生成误差导致侧栏宽度略有差异时，导航区和内容区按锚点分区比较，并显式记录导航参考宽度容差；已接受的侧栏宽度误差不得扩散到内容区 Diff。运行时跨路由容差仍为零：同一 Shell 的所有页面必须使用同一冻结宽度 Token 和同一 Shell DOM/几何。
 
 - Treat the input as read-only: never modify the original design directory. 输入只读：只扫描并复制字节，不重命名、移动、转码或改写源文件。
 - Write only beneath the approved output root. Store relative paths; reject absolute paths, URI targets, and traversal. 只写入已批准输出根目录，所有路径使用相对路径并拒绝绝对路径、URI 和越界路径。
@@ -24,6 +29,8 @@ This skill is independent. Do not call, require, or route work through `design-i
 - Readiness validation requires the original source directory. Omitting `--source-root` is an error, never a waiver. 可实施验证必须提供原始源目录；省略 `--source-root` 是错误，不能视为豁免。
 
 ## Workflow / 工作流
+
+System-first gate: after classifying evidence, classify pages into shell families, freeze one canonical navigation tree per shell, build the unified Router/shared shells/navigation registry, and route one representative page per shell. Only after this gate passes may page-content work begin. The locked baseline profile is the sole visual-scoring profile; wide/narrow/zoom profiles are stability-only. 系统优先门禁：证据分类后，先完成页面 Shell 家族归类、每个 Shell 唯一导航树冻结、统一 Router/共享 Shell/导航注册表建设，并为每个 Shell 接入一个代表页面；通过后才允许逐页内容开发。锁定基准 profile 是唯一视觉评分环境，宽屏/窄屏/缩放 profile 仅做稳定性验收。
 
 1. Read both intake references and establish source, output, authority order, languages, version, optional product evidence, environment, and Git allowlist. Do not silently fill missing optional inputs. 阅读双语输入规则，确定源、输出、权威顺序、语言、版本、产品证据、环境与 Git 白名单；缺失项不得静默补全。
    - [中文：输入与权威顺序](references/zh/intake-and-authority.md)
@@ -108,5 +115,7 @@ Identity merge or refinement is allowed only before freezing; after freezing eve
 - If any required evidence changes after preparation, rebuild the lock from source; never hand-edit hashes. 必需证据变化后从源重建锁，禁止手改哈希。
 
 ## Completion gate / 完成门禁
+
+For multi-page applications, readiness additionally requires approved shell-family classification, one canonical navigation system per shell, non-null route/shell/active-entry bindings, accepted system work items before page work, zero runtime shell drift across routes, one exact fixed-environment baseline for replica scoring, and separate wide/narrow/zoom stability profiles. Reference navigation-width tolerance is allowed only when explicit and region-anchored; it never relaxes runtime consistency. 多页应用还必须满足：Shell 家族分类获批、每个 Shell 仅一套规范导航、路由/Shell/激活项绑定非空、系统工作项先于页面工作验收、跨路由运行时 Shell 零漂移、使用唯一精确固定环境 baseline 计算复刻分数，并单独提供 wide/narrow/zoom 稳定性 profile。导航参考宽度容差只有显式登记并采用区域锚点时才允许，且绝不放宽运行时一致性。
 
 A handoff is ready for implementation only when both locale trees and all required contracts are present and substantive, all paths are package-relative, the original source is supplied and source/copy hashes plus the design lock verify, page/state/variant/component/requirement coverage is complete, each unknown points to an unresolved gap, and no blocker/major gap remains. QA requires validated evidence records for all three classes: computed visual comparison, structural mappings, and replayable interaction cases. A declared `pass` or arbitrary evidence file is insufficient. A generated skeleton is intentionally incomplete until an Agent enriches and validates it. 只有双语文档与合同内容实质完整、相对路径正确、验证时提供原始源目录且源/副本哈希和设计锁通过、页面/状态/变体/组件/需求覆盖完整、未知项均关联未解决缺口且无 blocker/major 时才可实施；视觉必须计算比对，结构必须映射，交互必须可重放，单纯填写 `pass` 或放置任意证据文件无效，生成骨架本身永远不等于完成。
